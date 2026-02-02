@@ -108,26 +108,52 @@
 
       <!-- Dialogs view -->
       <section id="dialogsView" class="dialogs-view" style="display:none;">
-        <div class="dialogs-list">
-          <div class="dialogs-header">
-            <h3>Диалоги</h3>
+        <div class="dialogs-toolbar">
+          <div class="dialogs-search">
+            <input id="userSearchInput" type="search" placeholder="Поиск пользователей по имени или почте" aria-label="Поиск пользователей" />
+            <div id="userSearchResults" class="search-results" style="display:none;"></div>
+          </div>
+          <div class="dialogs-tabs" role="tablist">
+            <button id="dialogsTabChats" class="dialogs-tab active" type="button" role="tab" aria-selected="true">Чаты</button>
+            <button id="dialogsTabNotifications" class="dialogs-tab" type="button" role="tab" aria-selected="false">
+              Уведомления
+              <span id="notificationsBadge" class="badge" style="display:none;">0</span>
+            </button>
             <button id="refreshDialogs" class="btn-secondary" type="button" aria-label="Обновить список диалогов">⟳</button>
           </div>
-          <div id="dialogItems" class="dialogs-items"></div>
-          <div id="dialogsEmpty" class="dialogs-empty" style="display:none;">Нет активных диалогов.</div>
         </div>
+<div class="dialogs-content">
+          <div class="dialogs-main">
+            <div class="dialogs-list">
+              <div class="dialogs-header">
+                <h3>Диалоги</h3>
+              </div>
+              <div id="dialogItems" class="dialogs-items"></div>
+              <div id="dialogsEmpty" class="dialogs-empty" style="display:none;">Нет активных диалогов.</div>
+            </div>
 
-        <div class="chat-panel">
-          <div class="chat-header">
-            <div id="chatTitle">Выберите диалог</div>
+            <div class="chat-panel">
+              <div class="chat-header">
+                <div id="chatTitle">Выберите диалог</div>
+              </div>
+              <div id="chatMessages" class="chat-messages">
+                <div id="chatEmptyState" class="chat-empty">Сообщения появятся после выбора диалога.</div>
+              </div>
+              <form id="chatForm" class="chat-input">
+                <input id="chatInput" type="text" placeholder="Введите сообщение" autocomplete="off" />
+                <button type="submit">Отправить</button>
+              </form>
+            </div>
           </div>
-          <div id="chatMessages" class="chat-messages">
-            <div id="chatEmptyState" class="chat-empty">Сообщения появятся после выбора диалога.</div>
+
+ <div id="notificationsPanel" class="notifications-panel" style="display:none;">
+            <div class="notifications-header">
+              <h3>Новые сообщения</h3>
+              <p>Уведомления о новых сообщениях от пользователей.</p>
+            </div>
+            <div id="notificationsList" class="notifications-list"></div>
+            <div id="notificationsEmpty" class="dialogs-empty" style="display:none;">Нет новых уведомлений.</div>
           </div>
-          <form id="chatForm" class="chat-input">
-            <input id="chatInput" type="text" placeholder="Введите сообщение" autocomplete="off" />
-            <button type="submit">Отправить</button>
-          </form>
         </div>
       </section>
 

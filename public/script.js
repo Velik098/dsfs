@@ -186,14 +186,52 @@ const chatEmptyState = document.getElementById("chatEmptyState");
 const chatForm = document.getElementById("chatForm");
 const chatInput = document.getElementById("chatInput");
 const refreshDialogs = document.getElementById("refreshDialogs");
+const userSearchInput = document.getElementById("userSearchInput");
+const userSearchResults = document.getElementById("userSearchResults");
+const dialogsTabChats = document.getElementById("dialogsTabChats");
+const dialogsTabNotifications = document.getElementById("dialogsTabNotifications");
+const notificationsPanel = document.getElementById("notificationsPanel");
+const notificationsList = document.getElementById("notificationsList");
+const notificationsEmpty = document.getElementById("notificationsEmpty");
+const notificationsBadge = document.getElementById("notificationsBadge");
 
 let dialogs = [];
 let currentDialogId = null;
+let currentDialogParticipant = null;
+let dialogsPoller = null;
+let allUsersCache = [];
+let userSearchTimeout = null;
+let notifications = [];
 
 function getCurrentUserId() {
   const payload = parseJwt(getToken());
   return payload?.id || payload?.email || null;
 }
+
+function loadLastSeenByDialog() {
+  try {
+    const raw = localStorage.getItem("uplio_dialogs_last_seen");
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveLastSeenByDialog(map) {
+  try {
+    localStorage.setItem("uplio_dialogs_last_seen", JSON.stringify(map || {}));
+  } catch (e) {
+    console.warn("saveLastSeenByDialog failed", e);
+  }
+}
+
+function setDialogSeen(dialogId, lastTimestamp) {
+  if (!dialogId || !lastTimestamp) return;
+  const map = loadLastSeenByDialog();
+  map[dialogId] = lastTimestamp;
+  saveLastSeenByDialog(map);
+}
+
 
 function setChatEmptyState(text) {
   if (chatMessages && chatEmptyState && !chatMessages.contains(chatEmptyState)) {
@@ -228,6 +266,91 @@ function getDialogTitle(dialog, fallbackId) {
   return dialog?.title || dialog?.name || dialog?.participant || `Диалог ${fallbackId}`;
 }
 
+async function loadUsers() {
+  if (allUsersCache.length) return allUsersCache;
+  try {
+    const res = await authFetch("/users");
+    if (!res.ok) throw new Error(`Users load failed: ${res.status}`);
+    const data = await res.json();
+    allUsersCache = Array.isArray(data) ? data : [];
+    return allUsersCache;
+  } catch (e) {
+    console.error(e);
+    return [];
+  }
+}
+
+function hideSearchResults() {
+  if (!userSearchResults) return;
+  userSearchResults.style.display = "none";
+  userSearchResults.innerHTML = "";
+}
+
+function renderSearchResults(query, users) {
+  if (!userSearchResults) return;
+  const trimmed = query.trim().toLowerCase();
+  if (!trimmed) {
+    hideSearchResults();
+    return;
+  }
+  const currentUserId = getCurrentUserId();
+  const matches = users.filter(user => {
+    if (!user) return false;
+    if (currentUserId && user.id === currentUserId) return false;
+    const name = (user.name || "").toLowerCase();
+    const email = (user.email || "").toLowerCase();
+    return name.includes(trimmed) || email.includes(trimmed);
+  });
+
+  if (!matches.length) {
+    userSearchResults.innerHTML = `<div class="dialogs-empty">Пользователи не найдены.</div>`;
+    userSearchResults.style.display = "block";
+    return;
+  }
+
+  userSearchResults.innerHTML = "";
+  matches.slice(0, 8).forEach(user => {
+    const item = document.createElement("div");
+    item.className = "search-result";
+    const avatarStyle = user.picture
+      ? `style="background-image:url('${escapeHtml(user.picture)}');background-size:cover;background-position:center;"`
+      : "";
+    item.innerHTML = `
+      <div class="search-result-info">
+        <div class="search-avatar" ${avatarStyle}></div>
+        <div>
+          <div class="search-name">${escapeHtml(user.name || user.email || "Пользователь")}</div>
+          <div class="search-email">${escapeHtml(user.email || "")}</div>
+        </div>
+      </div>
+    `;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn-secondary";
+    btn.textContent = "Открыть чат";
+    btn.addEventListener("click", () => {
+      const dialogId = [getCurrentUserId(), user.id].filter(Boolean).sort().join("_");
+      const existing = dialogs.find(d => d.id === dialogId);
+      if (!existing) {
+        dialogs.unshift({
+          id: dialogId,
+          title: user.name || user.email || "Диалог",
+          participant_id: user.id,
+          last_message: ""
+        });
+      }
+      selectDialog(dialogId, user.name || user.email || "Диалог", user.id);
+      hideSearchResults();
+      if (userSearchInput) userSearchInput.value = "";
+    });
+    item.appendChild(btn);
+    userSearchResults.appendChild(item);
+  });
+  userSearchResults.style.display = "block";
+}
+
+
+
 function renderDialogsList() {
   if (!dialogItems) return;
   dialogItems.innerHTML = "";
@@ -250,11 +373,98 @@ function renderDialogsList() {
       <div class="dialog-preview">${escapeHtml(lastText || "Нет сообщений")}</div>
     `;
     button.addEventListener("click", () => {
-      selectDialog(dialog.id, title);
+      selectDialog(dialog.id, title, dialog.participant_id || dialog.participantId);
     });
     dialogItems.appendChild(button);
   });
 }
+
+function setNotificationsBadge(count) {
+  if (!notificationsBadge) return;
+  if (count > 0) {
+    notificationsBadge.textContent = count > 9 ? "9+" : String(count);
+    notificationsBadge.style.display = "inline-flex";
+  } else {
+    notificationsBadge.style.display = "none";
+  }
+}
+
+function renderNotifications() {
+  if (!notificationsList || !notificationsEmpty) return;
+  notificationsList.innerHTML = "";
+  if (!notifications.length) {
+    notificationsEmpty.style.display = "block";
+    return;
+  }
+  notificationsEmpty.style.display = "none";
+  notifications.forEach(note => {
+    const item = document.createElement("div");
+    item.className = "notification-item";
+    item.innerHTML = `
+      <div class="notification-title">${escapeHtml(note.title)}</div>
+      <div class="notification-text">${escapeHtml(note.text)}</div>
+      <div class="notification-time">${escapeHtml(new Date(note.created_at).toLocaleString())}</div>
+    `;
+    item.addEventListener("click", () => {
+      showChatsTab();
+      selectDialog(note.dialog_id, note.title, note.from_user);
+    });
+    notificationsList.appendChild(item);
+  });
+}
+
+function updateNotificationsFromDialogs(dialogsList) {
+  const lastSeenMap = loadLastSeenByDialog();
+  const currentUserId = getCurrentUserId();
+  notifications = [];
+  dialogsList.forEach(dialog => {
+    if (!dialog?.last_message || !dialog.last_message_at) return;
+    if (dialog.last_sender === currentUserId) return;
+    const lastSeen = lastSeenMap[dialog.id];
+    if (lastSeen && new Date(dialog.last_message_at) <= new Date(lastSeen)) {
+      return;
+    }
+    notifications.push({
+      dialog_id: dialog.id,
+      title: getDialogTitle(dialog, dialog.id),
+      text: dialog.last_message,
+      created_at: dialog.last_message_at,
+      from_user: dialog.participant_id
+    });
+  });
+  setNotificationsBadge(notifications.length);
+  renderNotifications();
+}
+
+function showChatsTab() {
+  if (dialogsTabChats) {
+    dialogsTabChats.classList.add("active");
+    dialogsTabChats.setAttribute("aria-selected", "true");
+  }
+  if (dialogsTabNotifications) {
+    dialogsTabNotifications.classList.remove("active");
+    dialogsTabNotifications.setAttribute("aria-selected", "false");
+  }
+  if (notificationsPanel) notificationsPanel.style.display = "none";
+  const dialogsMain = document.querySelector(".dialogs-main");
+  if (dialogsMain) dialogsMain.style.display = "grid";
+}
+
+function showNotificationsTab() {
+  if (dialogsTabNotifications) {
+    dialogsTabNotifications.classList.add("active");
+    dialogsTabNotifications.setAttribute("aria-selected", "true");
+  }
+  if (dialogsTabChats) {
+    dialogsTabChats.classList.remove("active");
+    dialogsTabChats.setAttribute("aria-selected", "false");
+  }
+  const dialogsMain = document.querySelector(".dialogs-main");
+  if (dialogsMain) dialogsMain.style.display = "none";
+  if (notificationsPanel) notificationsPanel.style.display = "block";
+}
+
+
 
 async function loadDialogs() {
   if (!dialogItems) return;
@@ -268,15 +478,22 @@ async function loadDialogs() {
     const data = await res.json();
     dialogs = Array.isArray(data) ? data : (data.dialogs || []);
     renderDialogsList();
+    updateNotificationsFromDialogs(dialogs);
+    if (currentDialogId && !currentDialogParticipant) {
+      const activeDialog = dialogs.find(item => item.id === currentDialogId);
+      currentDialogParticipant = activeDialog?.participant_id || activeDialog?.participantId || null;
+    }
   } catch (e) {
     console.error(e);
     dialogItems.innerHTML = '<div class="dialogs-loading">Не удалось загрузить диалоги.</div>';
   }
 }
 
-async function selectDialog(dialogId, title) {
+async function selectDialog(dialogId, title, participantId) {
   currentDialogId = dialogId;
-  if (chatTitle) chatTitle.textContent = title || "Диалог";
+  const dialog = dialogs.find(item => item.id === dialogId);
+  currentDialogParticipant = participantId || dialog?.participant_id || dialog?.participantId || null;
+  if (chatTitle) chatTitle.textContent = title || getDialogTitle(dialog, dialogId);
   renderDialogsList();
   await loadMessages(dialogId);
 }
@@ -325,6 +542,11 @@ async function loadMessages(dialogId) {
     const data = await res.json();
     const messages = Array.isArray(data) ? data : (data.messages || []);
     renderMessages(messages);
+     const lastMessage = messages[messages.length - 1];
+    if (lastMessage?.created_at || lastMessage?.createdAt) {
+      setDialogSeen(dialogId, lastMessage.created_at || lastMessage.createdAt);
+    }
+    updateNotificationsFromDialogs(dialogs);
   } catch (e) {
     console.error(e);
     if (chatMessages) {
@@ -343,7 +565,11 @@ async function sendMessage(text) {
     setChatEmptyState("Сначала выберите диалог.");
     return;
   }
-  const payload = { text };
+  if (!currentDialogParticipant) {
+    alert("Не выбран получатель сообщения.");
+    return;
+  }
+  const payload = { text, to_user: currentDialogParticipant };
   try {
     const res = await authFetch(`/dialogs/${currentDialogId}/messages`, {
       method: "POST",
@@ -382,12 +608,17 @@ function appendLocalMessage(message) {
   clearChatEmptyState();
   chatMessages.appendChild(item);
   chatMessages.scrollTop = chatMessages.scrollHeight;
+  const lastTimestamp = message.created_at || message.createdAt || new Date().toISOString();
+  setDialogSeen(currentDialogId, lastTimestamp);
+  updateNotificationsFromDialogs(dialogs);
 }
 
 function updateDialogPreview(text) {
   const dialog = dialogs.find(item => item.id === currentDialogId);
   if (dialog) {
     dialog.last_message = text;
+    dialog.last_message_at = new Date().toISOString();
+    dialog.last_sender = getCurrentUserId();
   }
   renderDialogsList();
 }
@@ -407,6 +638,45 @@ if (refreshDialogs) {
     loadDialogs();
   });
 }
+
+if (dialogsTabChats) {
+  dialogsTabChats.addEventListener("click", () => {
+    showChatsTab();
+  });
+}
+
+if (dialogsTabNotifications) {
+  dialogsTabNotifications.addEventListener("click", () => {
+    showNotificationsTab();
+  });
+}
+
+if (userSearchInput) {
+  userSearchInput.addEventListener("input", async (event) => {
+    const value = event.target.value || "";
+    if (userSearchTimeout) window.clearTimeout(userSearchTimeout);
+    userSearchTimeout = window.setTimeout(async () => {
+      const users = await loadUsers();
+      renderSearchResults(value, users);
+    }, 250);
+  });
+
+  userSearchInput.addEventListener("blur", () => {
+    setTimeout(() => {
+      if (document.activeElement !== userSearchInput) {
+        hideSearchResults();
+      }
+    }, 150);
+  });
+}
+
+document.addEventListener("click", (event) => {
+  if (!userSearchResults || !userSearchInput) return;
+  if (!userSearchResults.contains(event.target) && event.target !== userSearchInput) {
+    hideSearchResults();
+  }
+});
+
 
 /* --- Profile state --- */
 let currentUser = null;
@@ -603,6 +873,22 @@ function setActiveMenu(labelText) {
   });
 }
 
+function startDialogsPolling() {
+  if (dialogsPoller) return;
+  dialogsPoller = window.setInterval(() => {
+    if (dialogsView && dialogsView.style.display !== "none") {
+      loadDialogs();
+    }
+  }, 15000);
+}
+
+function stopDialogsPolling() {
+  if (!dialogsPoller) return;
+  window.clearInterval(dialogsPoller);
+  dialogsPoller = null;
+}
+
+
 function showFeedView() {
   if (profileView) profileView.style.display = "none";
   if (dialogsView) dialogsView.style.display = "none";
@@ -611,6 +897,8 @@ function showFeedView() {
   const tabsEl = document.querySelector(".tabs");
   if (composer) composer.style.display = "block";
   if (tabsEl) tabsEl.style.display = "flex";
+  document.body.classList.remove("messenger-mode");
+  stopDialogsPolling();
   setActiveMenu("Лента");
   renderFeed();
 }
@@ -624,6 +912,8 @@ async function showProfileView() {
   if (feed) feed.style.display = "none";
   if (dialogsView) dialogsView.style.display = "none";
   if (profileView) profileView.style.display = "block";
+  document.body.classList.remove("messenger-mode");
+  stopDialogsPolling();
   setActiveMenu("Профиль");
   if (profile) {
     renderProfile(profile);
@@ -639,12 +929,16 @@ function showDialogsView() {
   if (tabsEl) tabsEl.style.display = "none";
   if (feed) feed.style.display = "none";
   if (profileView) profileView.style.display = "none";
-  if (dialogsView) dialogsView.style.display = "grid";
+  if (dialogsView) dialogsView.style.display = "flex";
+  document.body.classList.add("messenger-mode");
   setActiveMenu("Мессенджер");
+  showChatsTab();
   if (!currentDialogId) {
     setChatEmptyState("Выберите диалог слева.");
   }
   loadDialogs();
+  loadUsers();
+  startDialogsPolling();
 }
 
 /* Navigation handlers */

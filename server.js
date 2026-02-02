@@ -115,6 +115,14 @@ function verifyTokenFromHeader(req) {
   }
 }
 
+function requireAuth(req, res, next) {
+  const payload = verifyTokenFromHeader(req);
+  if (!payload) return res.status(401).json({ error: "Unauthorized" });
+  req.user = payload;
+  return next();
+}
+
+
 /* ---------------- Auth/Register ---------------- */
 // POST /register  { email, password }  OR { credential: "<google id_token>" } (prototype)
 app.post("/register", async (req, res) => {
@@ -203,6 +211,98 @@ app.post("/upload-header", uploadHeader.single("header"), (req, res) => {
   const rel = `/uploads/headers/${req.file.filename}`;
   res.json({ ok: true, path: rel });
 });
+
+/* ---------------- Dialogs/messages ---------------- */
+app.get("/dialogs", requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const rows = await DB.all(
+    "SELECT * FROM messages WHERE from_user = ? OR to_user = ? ORDER BY datetime(created_at) DESC",
+    [userId, userId]
+  );
+  if (!rows.length) return res.json([]);
+
+  const dialogsMap = new Map();
+  const otherUserIds = new Set();
+  rows.forEach(row => {
+    if (dialogsMap.has(row.dialog_id)) return;
+    const otherUser = row.from_user === userId ? row.to_user : row.from_user;
+    if (otherUser) otherUserIds.add(otherUser);
+    dialogsMap.set(row.dialog_id, {
+      id: row.dialog_id,
+      participant_id: otherUser,
+      last_message: row.text,
+      last_message_at: row.created_at,
+      last_sender: row.from_user
+    });
+  });
+
+  const ids = Array.from(otherUserIds).filter(Boolean);
+  const placeholders = ids.map(() => "?").join(",");
+  const userRows = ids.length
+    ? await DB.all(`SELECT id,email,name,picture FROM users WHERE id IN (${placeholders})`, ids)
+    : [];
+  const userMap = new Map(userRows.map(user => [user.id, user]));
+
+  const dialogs = Array.from(dialogsMap.values()).map(dialog => {
+    const user = dialog.participant_id ? userMap.get(dialog.participant_id) : null;
+    return {
+      ...dialog,
+      title: user?.name || user?.email || dialog.participant_id || "Диалог",
+      participant_name: user?.name || "",
+      participant_email: user?.email || "",
+      participant_picture: user?.picture || ""
+    };
+  });
+
+  return res.json(dialogs);
+});
+
+app.get("/dialogs/:dialogId/messages", requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const dialogId = req.params.dialogId;
+  if (!dialogId) return res.status(400).json({ error: "Missing dialog id" });
+  const rows = await DB.all(
+    "SELECT * FROM messages WHERE dialog_id = ? AND (from_user = ? OR to_user = ?) ORDER BY datetime(created_at) ASC",
+    [dialogId, userId, userId]
+  );
+  return res.json(rows);
+});
+
+app.post("/dialogs/:dialogId/messages", requireAuth, rateLimitMessage, async (req, res) => {
+  const userId = req.user.id;
+  const dialogId = req.params.dialogId;
+  const { text, to_user } = req.body || {};
+  const trimmed = typeof text === "string" ? text.trim() : "";
+  if (!dialogId) return res.status(400).json({ error: "Missing dialog id" });
+  if (!trimmed || trimmed.length < MESSAGE_TEXT_MIN_LENGTH || trimmed.length > MESSAGE_TEXT_MAX_LENGTH) {
+    return res.status(400).json({ error: "Invalid message length" });
+  }
+  let recipient = typeof to_user === "string" ? to_user.trim() : "";
+  if (!recipient) {
+    const last = await DB.get(
+      "SELECT from_user, to_user FROM messages WHERE dialog_id = ? ORDER BY datetime(created_at) DESC LIMIT 1",
+      [dialogId]
+    );
+    if (!last) return res.status(400).json({ error: "Missing recipient" });
+    recipient = last.from_user === userId ? last.to_user : last.from_user;
+  }
+  if (!recipient) return res.status(400).json({ error: "Missing recipient" });
+  const createdAt = new Date().toISOString();
+  await DB.run(
+    "INSERT INTO messages (dialog_id, from_user, to_user, text, created_at) VALUES (?,?,?,?,?)",
+    [dialogId, userId, recipient, trimmed, createdAt]
+  );
+  return res.json({
+    message: {
+      dialog_id: dialogId,
+      from_user: userId,
+      to_user: recipient,
+      text: trimmed,
+      created_at: createdAt
+    }
+  });
+});
+
 
 /* ---------------- Profile endpoints ---------------- */
 // GET /profile -> returns profile for user from Authorization Bearer token
