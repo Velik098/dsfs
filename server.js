@@ -3,12 +3,21 @@ import sqlite3 from "sqlite3";
 import { open } from "sqlite";
 import jwt from "jsonwebtoken";
 import multer from "multer";
+import crypto from "crypto";
 
 const app = express();
 app.use(express.json());
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 const JWT_EXPIRES = "7d";
+
+/* ---------------- ROOT ---------------- */
+app.get("/", (req, res) => {
+  res.json({
+    ok: true,
+    message: "API is running 🚀"
+  });
+});
 
 /* ---------------- DB ---------------- */
 const DB = await open({
@@ -60,7 +69,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_dialog_created ON messages(dialog_id, created_at);
 `);
 
-/* ---------------- Helpers ---------------- */
+/* ---------------- HELPERS ---------------- */
 function createToken(user) {
   return jwt.sign(
     { id: user.id, email: user.email, provider: user.provider || "local" },
@@ -87,7 +96,7 @@ function buildDialogId(a, b) {
   return [a, b].sort().join("__");
 }
 
-/* ---------------- Auth ---------------- */
+/* ---------------- AUTH ---------------- */
 app.post("/register", async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) {
@@ -112,7 +121,7 @@ app.post("/register", async (req, res) => {
   res.json({ ok: true, user, token: createToken(user) });
 });
 
-/* ---------------- Profile ---------------- */
+/* ---------------- PROFILE ---------------- */
 app.get("/profile", async (req, res) => {
   const payload = requireAuth(req, res);
   if (!payload) return;
@@ -167,7 +176,7 @@ app.post("/profile", async (req, res) => {
   res.json({ ok: true });
 });
 
-/* ---------------- Dialogs ---------------- */
+/* ---------------- DIALOGS ---------------- */
 app.get("/dialogs", async (req, res) => {
   const payload = requireAuth(req, res);
   if (!payload) return;
@@ -228,7 +237,6 @@ app.get("/dialogs/:id/messages", async (req, res) => {
     LIMIT ?
   `, params);
 
-  // помечаем как прочитанные
   await DB.run(`
     UPDATE messages
     SET read_at = ?
@@ -272,8 +280,8 @@ app.post("/dialogs/:id/messages", async (req, res) => {
   res.status(201).json({ ok: true, message });
 });
 
-/* ---------------- Server ---------------- */
+/* ---------------- SERVER ---------------- */
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () =>
-  console.log(`Server running → http://localhost:${PORT}`)
-);
+app.listen(PORT, () => {
+  console.log(`Server running → http://localhost:${PORT}`);
+});
