@@ -176,6 +176,238 @@ function authFetch(url, opts = {}) {
   return fetch(url, { ...opts, headers });
 }
 
+/* ---------- Dialogs ---------- */
+const dialogsView = document.getElementById("dialogsView");
+const dialogItems = document.getElementById("dialogItems");
+const dialogsEmpty = document.getElementById("dialogsEmpty");
+const chatTitle = document.getElementById("chatTitle");
+const chatMessages = document.getElementById("chatMessages");
+const chatEmptyState = document.getElementById("chatEmptyState");
+const chatForm = document.getElementById("chatForm");
+const chatInput = document.getElementById("chatInput");
+const refreshDialogs = document.getElementById("refreshDialogs");
+
+let dialogs = [];
+let currentDialogId = null;
+
+function getCurrentUserId() {
+  const payload = parseJwt(getToken());
+  return payload?.id || payload?.email || null;
+}
+
+function setChatEmptyState(text) {
+  if (chatMessages && chatEmptyState && !chatMessages.contains(chatEmptyState)) {
+    chatMessages.appendChild(chatEmptyState);
+  }
+  if (chatEmptyState) {
+    chatEmptyState.textContent = text;
+    chatEmptyState.style.display = "block";
+  }
+  if (chatMessages) chatMessages.classList.add("is-empty");
+  if (chatInput) chatInput.disabled = true;
+  if (chatForm) chatForm.classList.add("is-disabled");
+}
+
+function clearChatEmptyState() {
+  if (chatEmptyState) chatEmptyState.style.display = "none";
+  if (chatMessages) chatMessages.classList.remove("is-empty");
+  if (chatInput) chatInput.disabled = false;
+  if (chatForm) chatForm.classList.remove("is-disabled");
+}
+
+function clearChatMessages() {
+  if (!chatMessages) return;
+  Array.from(chatMessages.children).forEach(child => {
+    if (child !== chatEmptyState) {
+      child.remove();
+    }
+  });
+}
+
+function getDialogTitle(dialog, fallbackId) {
+  return dialog?.title || dialog?.name || dialog?.participant || `Диалог ${fallbackId}`;
+}
+
+function renderDialogsList() {
+  if (!dialogItems) return;
+  dialogItems.innerHTML = "";
+  if (!dialogs.length) {
+    if (dialogsEmpty) dialogsEmpty.style.display = "block";
+    return;
+  }
+  if (dialogsEmpty) dialogsEmpty.style.display = "none";
+  dialogs.forEach(dialog => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "dialog-item";
+    const title = getDialogTitle(dialog, dialog.id);
+    const lastText = dialog.last_message || dialog.lastMessage || dialog.preview || "";
+    if (dialog.id === currentDialogId) {
+      button.classList.add("active");
+    }
+    button.innerHTML = `
+      <div class="dialog-title">${escapeHtml(title)}</div>
+      <div class="dialog-preview">${escapeHtml(lastText || "Нет сообщений")}</div>
+    `;
+    button.addEventListener("click", () => {
+      selectDialog(dialog.id, title);
+    });
+    dialogItems.appendChild(button);
+  });
+}
+
+async function loadDialogs() {
+  if (!dialogItems) return;
+  dialogItems.innerHTML = '<div class="dialogs-loading">Загрузка...</div>';
+  if (dialogsEmpty) dialogsEmpty.style.display = "none";
+  try {
+    const res = await authFetch("/dialogs");
+    if (!res.ok) {
+      throw new Error(`Dialogs load failed: ${res.status}`);
+    }
+    const data = await res.json();
+    dialogs = Array.isArray(data) ? data : (data.dialogs || []);
+    renderDialogsList();
+  } catch (e) {
+    console.error(e);
+    dialogItems.innerHTML = '<div class="dialogs-loading">Не удалось загрузить диалоги.</div>';
+  }
+}
+
+async function selectDialog(dialogId, title) {
+  currentDialogId = dialogId;
+  if (chatTitle) chatTitle.textContent = title || "Диалог";
+  renderDialogsList();
+  await loadMessages(dialogId);
+}
+
+function renderMessages(messages = []) {
+  if (!chatMessages) return;
+  clearChatMessages();
+  if (!messages.length) {
+    setChatEmptyState("Пока нет сообщений. Напишите первым!");
+    return;
+  }
+  clearChatEmptyState();
+  const currentUserId = getCurrentUserId();
+  messages.forEach(msg => {
+    const item = document.createElement("div");
+    const fromUser = msg.from_user || msg.from || msg.user_id || msg.userId || msg.sender_id;
+    const isMine = currentUserId && fromUser && fromUser === currentUserId;
+    item.className = `chat-message ${isMine ? "me" : ""}`.trim();
+    const time = msg.created_at || msg.createdAt || "";
+    item.innerHTML = `
+      <div class="message-bubble">${escapeHtml(msg.text || "")}</div>
+      ${time ? `<div class="message-time">${escapeHtml(new Date(time).toLocaleString())}</div>` : ""}
+    `;
+    chatMessages.appendChild(item);
+  });
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+async function loadMessages(dialogId) {
+  if (!dialogId) {
+    setChatEmptyState("Выберите диалог слева.");
+    return;
+  }
+  if (chatMessages) {
+    clearChatMessages();
+    const loading = document.createElement("div");
+    loading.className = "dialogs-loading";
+    loading.textContent = "Загрузка сообщений...";
+    chatMessages.appendChild(loading);
+  }
+  try {
+    const res = await authFetch(`/dialogs/${dialogId}/messages`);
+    if (!res.ok) {
+      throw new Error(`Messages load failed: ${res.status}`);
+    }
+    const data = await res.json();
+    const messages = Array.isArray(data) ? data : (data.messages || []);
+    renderMessages(messages);
+  } catch (e) {
+    console.error(e);
+    if (chatMessages) {
+      clearChatMessages();
+      const error = document.createElement("div");
+      error.className = "dialogs-loading";
+      error.textContent = "Не удалось загрузить сообщения.";
+      chatMessages.appendChild(error);
+    }
+    setChatEmptyState("Не удалось загрузить сообщения.");
+  }
+}
+
+async function sendMessage(text) {
+  if (!currentDialogId) {
+    setChatEmptyState("Сначала выберите диалог.");
+    return;
+  }
+  const payload = { text };
+  try {
+    const res = await authFetch(`/dialogs/${currentDialogId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      throw new Error(`Message send failed: ${res.status}`);
+    }
+    const data = await res.json();
+    const newMessage = data?.message || data || { text, created_at: new Date().toISOString(), from_user: getCurrentUserId() };
+    appendLocalMessage(newMessage);
+    updateDialogPreview(text);
+  } catch (e) {
+    console.error(e);
+    alert("Не удалось отправить сообщение.");
+  }
+}
+
+function appendLocalMessage(message) {
+  if (!chatMessages) return;
+  if (chatMessages.classList.contains("is-empty")) {
+    renderMessages([message]);
+    return;
+  }
+  const currentUserId = getCurrentUserId();
+  const item = document.createElement("div");
+  const fromUser = message.from_user || message.from || message.user_id || message.userId || message.sender_id;
+  const isMine = currentUserId && fromUser && fromUser === currentUserId;
+  item.className = `chat-message ${isMine ? "me" : ""}`.trim();
+  const time = message.created_at || message.createdAt || "";
+  item.innerHTML = `
+    <div class="message-bubble">${escapeHtml(message.text || "")}</div>
+    ${time ? `<div class="message-time">${escapeHtml(new Date(time).toLocaleString())}</div>` : ""}
+  `;
+  clearChatEmptyState();
+  chatMessages.appendChild(item);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function updateDialogPreview(text) {
+  const dialog = dialogs.find(item => item.id === currentDialogId);
+  if (dialog) {
+    dialog.last_message = text;
+  }
+  renderDialogsList();
+}
+
+if (chatForm) {
+  chatForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const text = chatInput?.value?.trim();
+    if (!text) return;
+    if (chatInput) chatInput.value = "";
+    sendMessage(text);
+  });
+}
+
+if (refreshDialogs) {
+  refreshDialogs.addEventListener("click", () => {
+    loadDialogs();
+  });
+}
+
 /* --- Profile state --- */
 let currentUser = null;
 let profile = null;
@@ -373,6 +605,7 @@ function setActiveMenu(labelText) {
 
 function showFeedView() {
   if (profileView) profileView.style.display = "none";
+  if (dialogsView) dialogsView.style.display = "none";
   if (feed) feed.style.display = "block";
   const composer = document.querySelector(".composer");
   const tabsEl = document.querySelector(".tabs");
@@ -389,6 +622,7 @@ async function showProfileView() {
   if (composer) composer.style.display = "none";
   if (tabsEl) tabsEl.style.display = "none";
   if (feed) feed.style.display = "none";
+  if (dialogsView) dialogsView.style.display = "none";
   if (profileView) profileView.style.display = "block";
   setActiveMenu("Профиль");
   if (profile) {
@@ -396,6 +630,21 @@ async function showProfileView() {
   } else {
     profileView.innerHTML = '<div class="section-card"><p style="color:var(--muted)">Профиль не найден.</p></div>';
   }
+}
+
+function showDialogsView() {
+  const composer = document.querySelector(".composer");
+  const tabsEl = document.querySelector(".tabs");
+  if (composer) composer.style.display = "none";
+  if (tabsEl) tabsEl.style.display = "none";
+  if (feed) feed.style.display = "none";
+  if (profileView) profileView.style.display = "none";
+  if (dialogsView) dialogsView.style.display = "grid";
+  setActiveMenu("Мессенджер");
+  if (!currentDialogId) {
+    setChatEmptyState("Выберите диалог слева.");
+  }
+  loadDialogs();
 }
 
 /* Navigation handlers */
@@ -416,6 +665,10 @@ document.querySelectorAll(".menu-item").forEach(btn => {
       });
       setActiveMenu("Проекты");
     } else {
+      if (label === "Мессенджер") {
+        showDialogsView();
+        return;
+      }
       setActiveMenu(label);
     }
   });

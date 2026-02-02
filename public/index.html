@@ -106,6 +106,31 @@
       <!-- Profile view will be rendered here -->
       <div id="profileView" style="display:none;padding-top:8px;"></div>
 
+      <!-- Dialogs view -->
+      <section id="dialogsView" class="dialogs-view" style="display:none;">
+        <div class="dialogs-list">
+          <div class="dialogs-header">
+            <h3>Диалоги</h3>
+            <button id="refreshDialogs" class="btn-secondary" type="button" aria-label="Обновить список диалогов">⟳</button>
+          </div>
+          <div id="dialogItems" class="dialogs-items"></div>
+          <div id="dialogsEmpty" class="dialogs-empty" style="display:none;">Нет активных диалогов.</div>
+        </div>
+
+        <div class="chat-panel">
+          <div class="chat-header">
+            <div id="chatTitle">Выберите диалог</div>
+          </div>
+          <div id="chatMessages" class="chat-messages">
+            <div id="chatEmptyState" class="chat-empty">Сообщения появятся после выбора диалога.</div>
+          </div>
+          <form id="chatForm" class="chat-input">
+            <input id="chatInput" type="text" placeholder="Введите сообщение" autocomplete="off" />
+            <button type="submit">Отправить</button>
+          </form>
+        </div>
+      </section>
+
     </main>
 
     <!-- RIGHT -->
