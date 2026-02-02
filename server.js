@@ -2,24 +2,25 @@ import express from "express";
 import sqlite3 from "sqlite3";
 import { open } from "sqlite";
 import jwt from "jsonwebtoken";
-import multer from "multer";
 import crypto from "crypto";
+import path from "path";
+import { fileURLToPath } from "url";
 
 const app = express();
 app.use(express.json());
 
+/* ---------------- PATH ---------------- */
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+/* ---------------- STATIC FILES ---------------- */
+app.use(express.static(path.join(__dirname, "public")));
+
+/* ---------------- JWT ---------------- */
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 const JWT_EXPIRES = "7d";
 
-/* ---------------- ROOT ---------------- */
-app.get("/", (req, res) => {
-  res.json({
-    ok: true,
-    message: "API is running 🚀"
-  });
-});
-
-/* ---------------- DB ---------------- */
+/* ---------------- DATABASE ---------------- */
 const DB = await open({
   filename: "./db.sqlite",
   driver: sqlite3.Database
