@@ -1,288 +1,369 @@
 import express from "express";
-import sqlite3 from "sqlite3";
-import { open } from "sqlite";
-import jwt from "jsonwebtoken";
-import crypto from "crypto";
 import path from "path";
 import { fileURLToPath } from "url";
+import multer from "multer";
+import cors from "cors";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
+import fs from "fs";
+import { OAuth2Client } from "google-auth-library";
+import { openDatabase } from "./database.js";
 
-const app = express();
-app.use(express.json());
-
-/* ---------------- PATH ---------------- */
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-/* ---------------- STATIC FILES ---------------- */
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// static
+app.use("/uploads", express.static(path.join(__dirname, "public", "uploads")));
 app.use(express.static(path.join(__dirname, "public")));
 
-/* ---------------- JWT ---------------- */
-const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
+const DB = await openDatabase(path.join(__dirname, "uplio.db"));
+
+// JWT config
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error("Missing required env: JWT_SECRET");
+  process.exit(1);
+}
 const JWT_EXPIRES = "7d";
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
+const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
-/* ---------------- DATABASE ---------------- */
-const DB = await open({
-  filename: "./db.sqlite",
-  driver: sqlite3.Database
+const MESSAGE_TEXT_MIN_LENGTH = 1;
+const MESSAGE_TEXT_MAX_LENGTH = 1000;
+const messageRateLimit = {
+  windowMs: 60_000,
+  max: 20
+};
+const messageRateBuckets = new Map();
+
+// ensure upload folders exist
+const AVATARS_DIR = path.join(__dirname, "public", "uploads", "avatars");
+const HEADERS_DIR = path.join(__dirname, "public", "uploads", "headers");
+fs.mkdirSync(AVATARS_DIR, { recursive: true });
+fs.mkdirSync(HEADERS_DIR, { recursive: true });
+
+// multer storages
+const storageAvatar = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, AVATARS_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || ".png";
+    cb(null, `avatar_${Date.now()}${ext}`);
+  }
 });
+const storageHeader = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, HEADERS_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || ".jpg";
+    cb(null, `header_${Date.now()}${ext}`);
+  }
+});
+const uploadAvatar = multer({ storage: storageAvatar });
+const uploadHeader = multer({ storage: storageHeader });
 
+/* ---------------- DB init: create tables if not exists ---------------- */
 await DB.exec(`
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
-  email TEXT,
+  email TEXT UNIQUE,
   password TEXT,
   name TEXT,
   picture TEXT,
   provider TEXT,
   createdAt TEXT
 );
-
 CREATE TABLE IF NOT EXISTS profiles (
   user_id TEXT PRIMARY KEY,
   name TEXT,
   location TEXT,
-  roles TEXT,
+  roles TEXT,    -- JSON
   about TEXT,
-  offers TEXT,
-  needs TEXT,
-  projects TEXT,
-  stats TEXT,
+  offers TEXT,   -- JSON
+  needs TEXT,    -- JSON
+  projects TEXT, -- JSON
+  stats TEXT,    -- JSON
   avatar TEXT,
   header TEXT
 );
-
 CREATE TABLE IF NOT EXISTS messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   dialog_id TEXT,
   from_user TEXT,
   to_user TEXT,
   text TEXT,
-  created_at TEXT,
-  read_at TEXT
+  created_at TEXT
 );
 `);
 
-await DB.exec(`
-CREATE INDEX IF NOT EXISTS idx_messages_dialog_id ON messages(dialog_id);
-CREATE INDEX IF NOT EXISTS idx_messages_from_user ON messages(from_user);
-CREATE INDEX IF NOT EXISTS idx_messages_to_user ON messages(to_user);
-CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
-CREATE INDEX IF NOT EXISTS idx_messages_dialog_created ON messages(dialog_id, created_at);
-`);
-
-/* ---------------- HELPERS ---------------- */
+/* ---------------- Helpers ---------------- */
 function createToken(user) {
-  return jwt.sign(
-    { id: user.id, email: user.email, provider: user.provider || "local" },
-    JWT_SECRET,
-    { expiresIn: JWT_EXPIRES }
-  );
+  const payload = { id: user.id, email: user.email, provider: user.provider || "local" };
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES });
 }
 
-function requireAuth(req, res) {
+function verifyTokenFromHeader(req) {
   const ah = req.headers.authorization || "";
-  if (!ah.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Unauthorized" });
-    return null;
-  }
+  if (!ah.startsWith("Bearer ")) return null;
+  const token = ah.slice(7);
   try {
-    return jwt.verify(ah.slice(7), JWT_SECRET);
-  } catch {
-    res.status(401).json({ error: "Unauthorized" });
+    return jwt.verify(token, JWT_SECRET);
+  } catch (e) {
     return null;
   }
 }
 
-function buildDialogId(a, b) {
-  return [a, b].sort().join("__");
+/* ---------------- Auth/Register ---------------- */
+// POST /register  { email, password }  OR { credential: "<google id_token>" } (prototype)
+app.post("/register", async (req, res) => {
+  try {
+    const { email, password, credential } = req.body || {};
+    if (!email && !credential) return res.status(400).json({ error: "Missing email/password or credential" });
+
+    let user = null;
+    if (credential) {
+      // NOTE: prototype: decode without verification
+      const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
+const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
+
+const MESSAGE_TEXT_MIN_LENGTH = 1;
+const MESSAGE_TEXT_MAX_LENGTH = 1000;
+const messageRateLimit = {
+  windowMs: 60_000,
+  max: 20
+};
+const messageRateBuckets = new Map();
+      if (!payload || !payload.email) return res.status(400).json({ error: "Invalid credential token" });
+      const id = payload.sub || `g_${Math.random().toString(36).slice(2,10)}`;
+      user = { id, email: payload.email, name: payload.name || "", picture: payload.picture || "", provider: "google", createdAt: new Date().toISOString() };
+      // upsert user
+      const exists = await DB.get("SELECT * FROM users WHERE email = ?", [user.email]);
+      if (exists) {
+        await DB.run("UPDATE users SET lastSeen = ? WHERE id = ?", [new Date().toISOString(), exists.id]);
+        const token = createToken(exists);
+        return res.json({ ok: true, user: { id: exists.id, email: exists.email, name: exists.name, picture: exists.picture, provider: exists.provider }, token });
+      } else {
+        await DB.run("INSERT INTO users (id,email,name,picture,provider,createdAt) VALUES (?,?,?,?,?,?)",
+          [user.id, user.email, user.name, user.picture, user.provider, user.createdAt]);
+        const token = createToken(user);
+        return res.json({ ok: true, user, token });
+      }
+    } else {
+      // email/password registration (simple)
+      if (!/\S+@\S+\.\S+/.test(email)) return res.status(400).json({ error: "Invalid email" });
+      if (!password || password.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters" });
+      const existing = await DB.get("SELECT * FROM users WHERE email = ?", [email.toLowerCase()]);
+      if (existing) {
+        // try to login if password matches (for convenience)
+        const match = await bcrypt.compare(password, existing.password || "");
+        if (!match) return res.status(409).json({ error: "User already exists. Wrong password." });
+        const token = createToken(existing);
+        return res.json({ ok: true, user: { id: existing.id, email: existing.email, name: existing.name, picture: existing.picture }, token, note: "existing" });
+      } else {
+        const id = "u_" + Math.random().toString(36).slice(2,10);
+        const hashed = await bcrypt.hash(password, 10);
+        const createdAt = new Date().toISOString();
+        await DB.run("INSERT INTO users (id,email,password,provider,createdAt) VALUES (?,?,?,?,?)", [id, email.toLowerCase(), hashed, "local", createdAt]);
+        const userNew = { id, email: email.toLowerCase(), provider: "local", createdAt };
+        const token = createToken(userNew);
+        return res.json({ ok: true, user: userNew, token });
+      }
+    }
+  } catch (err) {
+    console.error("POST /register error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+function rateLimitMessage(req, res, next) {
+  const now = Date.now();
+  const key = req.ip || "unknown";
+  const existing = messageRateBuckets.get(key);
+  if (!existing || now > existing.resetAt) {
+    messageRateBuckets.set(key, { count: 1, resetAt: now + messageRateLimit.windowMs });
+    return next();
+  }
+  if (existing.count >= messageRateLimit.max) {
+    return res.status(429).json({ error: "Too many messages, slow down" });
+  }
+  existing.count += 1;
+  return next();
 }
 
-/* ---------------- AUTH ---------------- */
-app.post("/register", async (req, res) => {
-  const { email, password } = req.body || {};
-  if (!email || !password) {
-    return res.status(400).json({ error: "Missing email or password" });
-  }
-
-  const id = crypto.randomUUID();
-  const user = {
-    id,
-    email,
-    name: email.split("@")[0],
-    picture: null,
-    provider: "local",
-    createdAt: new Date().toISOString()
-  };
-
-  await DB.run(
-    "INSERT INTO users (id,email,name,picture,provider,createdAt) VALUES (?,?,?,?,?,?)",
-    [user.id, user.email, user.name, user.picture, user.provider, user.createdAt]
-  );
-
-  res.json({ ok: true, user, token: createToken(user) });
+/* ---------------- Upload avatar/header ---------------- */
+app.post("/upload-avatar", uploadAvatar.single("avatar"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file" });
+  const rel = `/uploads/avatars/${req.file.filename}`;
+  res.json({ ok: true, path: rel });
+});
+app.post("/upload-header", uploadHeader.single("header"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file" });
+  const rel = `/uploads/headers/${req.file.filename}`;
+  res.json({ ok: true, path: rel });
 });
 
-/* ---------------- PROFILE ---------------- */
+/* ---------------- Profile endpoints ---------------- */
+// GET /profile -> returns profile for user from Authorization Bearer token
 app.get("/profile", async (req, res) => {
-  const payload = requireAuth(req, res);
-  if (!payload) return;
-
-  const row = await DB.get(
-    "SELECT * FROM profiles WHERE user_id = ?",
-    [payload.id]
-  );
-
-  res.json({ ok: true, profile: row || null });
-});
-
-app.post("/profile", async (req, res) => {
-  const payload = requireAuth(req, res);
-  if (!payload) return;
-
-  const data = req.body || {};
-  const exists = await DB.get(
-    "SELECT 1 FROM profiles WHERE user_id = ?",
-    [payload.id]
-  );
-
-  const values = [
-    payload.id,
-    data.name || "",
-    data.location || "",
-    JSON.stringify(data.roles || []),
-    data.about || "",
-    JSON.stringify(data.offers || []),
-    JSON.stringify(data.needs || []),
-    JSON.stringify(data.projects || []),
-    JSON.stringify(data.stats || {}),
-    data.avatar || null,
-    data.header || null
-  ];
-
-  if (exists) {
-    await DB.run(`
-      UPDATE profiles SET
-        name=?, location=?, roles=?, about=?, offers=?, needs=?,
-        projects=?, stats=?, avatar=?, header=?
-      WHERE user_id=?
-    `, [...values.slice(1), payload.id]);
-  } else {
-    await DB.run(`
-      INSERT INTO profiles
-      (user_id,name,location,roles,about,offers,needs,projects,stats,avatar,header)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?)
-    `, values);
+  const payload = verifyTokenFromHeader(req);
+  if (!payload) return res.status(401).json({ error: "Unauthorized" });
+  try {
+    const userId = payload.id;
+    // try profile
+    const row = await DB.get("SELECT * FROM profiles WHERE user_id = ?", [userId]);
+    let profile = null;
+    if (row) {
+      profile = {
+        user_id: row.user_id,
+        name: row.name,
+        location: row.location,
+        roles: row.roles ? JSON.parse(row.roles) : [],
+        about: row.about || "",
+        offers: row.offers ? JSON.parse(row.offers) : [],
+        needs: row.needs ? JSON.parse(row.needs) : [],
+        projects: row.projects ? JSON.parse(row.projects) : [],
+        stats: row.stats ? JSON.parse(row.stats) : { collaborations: 0, skillsConfirmed: 0, projects: 0 },
+        avatar: row.avatar || null,
+        header: row.header || null
+      };
+    } else {
+      // fallback: try to get user base info
+      const user = await DB.get("SELECT * FROM users WHERE id = ?", [userId]);
+      profile = {
+        user_id: userId,
+        name: user?.name || user?.email || "",
+        location: "",
+        roles: [],
+        about: "",
+        offers: [],
+        needs: [],
+        projects: [],
+        stats: { collaborations: 0, skillsConfirmed: 0, projects: 0 },
+        avatar: user?.picture || null,
+        header: null
+      };
+    }
+    return res.json({ ok: true, profile });
+  } catch (e) {
+    console.error("GET /profile err", e);
+    return res.status(500).json({ error: "Server error" });
   }
-
-  res.json({ ok: true });
 });
 
-/* ---------------- DIALOGS ---------------- */
-app.get("/dialogs", async (req, res) => {
-  const payload = requireAuth(req, res);
-  if (!payload) return;
+// POST /profile -> update profile for user (auth)
+app.post("/profile", async (req, res) => {
+  const payload = verifyTokenFromHeader(req);
+  if (!payload) return res.status(401).json({ error: "Unauthorized" });
 
   const userId = payload.id;
+  const {
+    name = "",
+    location = "",
+    roles = [],
+    about = "",
+    offers = [],
+    needs = [],
+    projects = [],
+    stats = { collaborations: 0, skillsConfirmed: 0, projects: 0 },
+    avatar = null,
+    header = null
+  } = req.body || {};
 
-  const rows = await DB.all(`
-    SELECT
-      m.dialog_id,
-      m.from_user,
-      m.to_user,
-      m.text,
-      m.created_at,
-      (
-        SELECT COUNT(*)
-        FROM messages um
-        WHERE um.dialog_id = m.dialog_id
-          AND um.to_user = ?
-          AND um.read_at IS NULL
-      ) AS unread_count
-    FROM messages m
-    JOIN (
-      SELECT dialog_id, MAX(id) AS last_id
-      FROM messages
-      WHERE from_user = ? OR to_user = ?
-      GROUP BY dialog_id
-    ) lm ON m.id = lm.last_id
-    ORDER BY m.created_at DESC
-  `, [userId, userId, userId]);
+  try {
+    // check if profile exists
+    const existing = await DB.get("SELECT * FROM profiles WHERE user_id = ?", [userId]);
+    const rolesJSON = JSON.stringify(roles || []);
+    const offersJSON = JSON.stringify(offers || []);
+    const needsJSON = JSON.stringify(needs || []);
+    const projectsJSON = JSON.stringify(projects || []);
+    const statsJSON = JSON.stringify(stats || { collaborations: 0, skillsConfirmed: 0, projects: 0 });
 
-  res.json({ ok: true, dialogs: rows });
+    if (existing) {
+      // preserve avatar/header if not provided
+      const avatarToSave = avatar !== null ? avatar : existing.avatar;
+      const headerToSave = header !== null ? header : existing.header;
+      await DB.run(`UPDATE profiles SET name=?, location=?, roles=?, about=?, offers=?, needs=?, projects=?, stats=?, avatar=?, header=? WHERE user_id = ?`,
+        [name, location, rolesJSON, about, offersJSON, needsJSON, projectsJSON, statsJSON, avatarToSave, headerToSave, userId]);
+      const row = await DB.get("SELECT * FROM profiles WHERE user_id = ?", [userId]);
+      const profile = {
+        user_id: row.user_id,
+        name: row.name,
+        location: row.location,
+        roles: row.roles ? JSON.parse(row.roles) : [],
+        about: row.about,
+        offers: row.offers ? JSON.parse(row.offers) : [],
+        needs: row.needs ? JSON.parse(row.needs) : [],
+        projects: row.projects ? JSON.parse(row.projects) : [],
+        stats: row.stats ? JSON.parse(row.stats) : {},
+        avatar: row.avatar,
+        header: row.header
+      };
+      return res.json({ ok: true, profile });
+    } else {
+      // insert
+      await DB.run(`INSERT INTO profiles (user_id,name,location,roles,about,offers,needs,projects,stats,avatar,header) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        [userId, name, location, rolesJSON, about, offersJSON, needsJSON, projectsJSON, statsJSON, avatar, header]);
+      const row = await DB.get("SELECT * FROM profiles WHERE user_id = ?", [userId]);
+      const profile = {
+        user_id: row.user_id,
+        name: row.name,
+        location: row.location,
+        roles: row.roles ? JSON.parse(row.roles) : [],
+        about: row.about,
+        offers: row.offers ? JSON.parse(row.offers) : [],
+        needs: row.needs ? JSON.parse(row.needs) : [],
+        projects: row.projects ? JSON.parse(row.projects) : [],
+        stats: row.stats ? JSON.parse(row.stats) : {},
+        avatar: row.avatar,
+        header: row.header
+      };
+      return res.json({ ok: true, profile });
+    }
+  } catch (e) {
+    console.error("POST /profile err", e);
+    return res.status(500).json({ error: "Server error" });
+  }
 });
 
-app.get("/dialogs/:id/messages", async (req, res) => {
-  const payload = requireAuth(req, res);
-  if (!payload) return;
+/* ---------------- Messages ---------------- */
+app.post("/messages/send", rateLimitMessage, async (req, res) => {
+  const payload = verifyTokenFromHeader(req);
+  if (!payload) return res.status(401).json({ error: "Unauthorized" });
 
-  const dialogId = req.params.id;
-  const limit = Math.min(Number(req.query.limit) || 50, 100);
-  const cursor = Number(req.query.cursor) || null;
-
-  const params = [dialogId];
-  let cursorSql = "";
-
-  if (cursor) {
-    cursorSql = "AND id < ?";
-    params.push(cursor);
+  const { toUser, text, dialogId } = req.body || {};
+  if (typeof text !== "string") return res.status(400).json({ error: "Text must be a string" });
+  const trimmed = text.trim();
+  if (trimmed.length < MESSAGE_TEXT_MIN_LENGTH || trimmed.length > MESSAGE_TEXT_MAX_LENGTH) {
+    return res.status(400).json({ error: `Text length must be ${MESSAGE_TEXT_MIN_LENGTH}-${MESSAGE_TEXT_MAX_LENGTH}` });
   }
+  if (typeof toUser !== "string" || !toUser.trim()) {
+    return res.status(400).json({ error: "Missing recipient" });
+  }
+  const fromUser = payload.id;
+  const safeDialogId = typeof dialogId === "string" && dialogId.trim()
+    ? dialogId.trim()
+    : [fromUser, toUser.trim()].sort().join("_");
 
-  params.push(limit);
-
-  const messages = await DB.all(`
-    SELECT *
-    FROM messages
-    WHERE dialog_id = ?
-    ${cursorSql}
-    ORDER BY id DESC
-    LIMIT ?
-  `, params);
-
-  await DB.run(`
-    UPDATE messages
-    SET read_at = ?
-    WHERE dialog_id = ?
-      AND to_user = ?
-      AND read_at IS NULL
-  `, [new Date().toISOString(), dialogId, payload.id]);
-
-  const nextCursor =
-    messages.length === limit ? messages[messages.length - 1].id : null;
-
-  res.json({ ok: true, messages, next_cursor: nextCursor });
+  try {
+    await DB.run(
+      "INSERT INTO messages (dialog_id, from_user, to_user, text, created_at) VALUES (?,?,?,?,?)",
+      [safeDialogId, fromUser, toUser.trim(), trimmed, new Date().toISOString()]
+    );
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error("POST /messages/send err", e);
+    return res.status(500).json({ error: "Server error" });
+  }
 });
 
-app.post("/dialogs/:id/messages", async (req, res) => {
-  const payload = requireAuth(req, res);
-  if (!payload) return;
 
-  const { text, to_user } = req.body || {};
-  if (!text || !to_user) {
-    return res.status(400).json({ error: "Missing text or to_user" });
-  }
-
-  const dialogId = buildDialogId(payload.id, to_user);
-  if (dialogId !== req.params.id) {
-    return res.status(400).json({ error: "Dialog id mismatch" });
-  }
-
-  const createdAt = new Date().toISOString();
-
-  const result = await DB.run(`
-    INSERT INTO messages (dialog_id, from_user, to_user, text, created_at)
-    VALUES (?, ?, ?, ?, ?)
-  `, [dialogId, payload.id, to_user, text.trim(), createdAt]);
-
-  const message = await DB.get(
-    "SELECT * FROM messages WHERE id = ?",
-    [result.lastID]
-  );
-
-  res.status(201).json({ ok: true, message });
+/* ---------------- Misc testing endpoints ---------------- */
+app.get("/users", async (req, res) => {
+  const rows = await DB.all("SELECT id,email,name,picture,provider,createdAt FROM users");
+  res.json(rows);
 });
 
-/* ---------------- SERVER ---------------- */
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running → http://localhost:${PORT}`);
-});
+app.listen(PORT, () => console.log(`UPLIO running → http://localhost:${PORT}`));
