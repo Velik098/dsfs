@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Moneyway Social — Register</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="assets/css/style.css" />
+</head>
+<body class="page-auth" data-page="register">
+  <div class="bg-orb bg-orb-a"></div>
+  <div class="bg-orb bg-orb-b"></div>
+  <div class="bg-grid"></div>
+
+  <main class="auth">
+    <div class="auth-card glass">
+      <div class="brand auth-brand">
+        <div class="brand-icon">MW</div>
+        <div>
+          <div class="brand-title">Moneyway</div>
+          <div class="brand-subtitle">Join the social freelance wave</div>
+        </div>
+      </div>
+      <h1>Create your account</h1>
+      <p class="muted">Build a profile that looks like your best work.</p>
+
+      <form class="auth-form">
+        <label>
+          Full name
+          <input type="text" placeholder="Aline Moore" required />
+        </label>
+        <label>
+          Email
+          <input type="email" placeholder="you@studio.com" required />
+        </label>
+        <label>
+          Password
+          <input type="password" placeholder="At least 8 characters" required />
+        </label>
+        <label>
+          Role
+          <select>
+            <option>Designer</option>
+            <option>Developer</option>
+            <option>Strategist</option>
+            <option>Motion</option>
+            <option>Writer</option>
+          </select>
+        </label>
+        <button class="btn btn-primary btn-block" type="submit">Create Account</button>
+        <button class="btn btn-secondary btn-block" type="button"><i class="fa-brands fa-github"></i> Continue with GitHub</button>
+      </form>
+
+      <div class="auth-footer">
+        Already have an account? <a href="login.html">Sign in</a>
+      </div>
+    </div>
+  </main>
+
+  <script src="assets/js/app.js"></script>
+</body>
+</html>
