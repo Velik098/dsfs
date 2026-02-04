@@ -22,27 +22,29 @@
       </div>
 
       <h1>Войти</h1>
-      <p class="muted">Доступ к ленте, сообщениям и проектам.</p>
+      <p class="muted">Почта или номер телефона — и вы снова в ленте.</p>
 
-      <form class="auth-form">
+      <div class="auth-error" id="authError" role="alert" aria-live="polite"></div>
+
+      <form class="auth-form" id="loginForm">
         <label>
-          Почта
-          <input type="email" placeholder="you@studio.com" required />
+          Почта или телефон
+          <input type="text" name="identifier" inputmode="email" placeholder="you@studio.com или +7 900 000-00-00" required />
         </label>
         <label>
           Пароль
-          <input type="password" placeholder="Введите пароль" required />
+          <input type="password" name="password" placeholder="Введите пароль" required />
         </label>
         <div class="auth-row">
           <label class="checkbox">
-            <input type="checkbox" />
-            <span>Не выходить</span>
+            <input type="checkbox" name="remember" />
+            <span>Запомнить меня</span>
           </label>
           <a href="#">Забыли пароль?</a>
         </div>
 
         <button class="btn btn-primary btn-block" type="submit">Войти</button>
-        <button class="btn btn-secondary btn-block" type="button"><i class="fa-brands fa-google"></i> Войти через Google</button>
+        <button class="btn btn-secondary btn-block" type="button" disabled title="Скоро"><i class="fa-brands fa-google"></i> Войти через Google</button>
       </form>
 
       <div class="auth-footer">

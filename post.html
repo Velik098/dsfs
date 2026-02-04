@@ -63,11 +63,11 @@
       </section>
 
       <section class="create-form">
-        <form>
+        <form id="projectForm">
           <div class="form-grid">
             <label>
               Название
-              <input type="text" placeholder="Онбординг для финтех-приложения" />
+              <input type="text" name="title" placeholder="Онбординг для финтех-приложения" />
             </label>
             <label>
               Категория
@@ -81,11 +81,11 @@
             </label>
             <label class="full">
               Описание
-              <textarea rows="4" placeholder="Коротко опишите задачу, объём работ и ожидания по срокам."></textarea>
+              <textarea name="body" rows="4" placeholder="Коротко опишите задачу, объём работ и ожидания по срокам."></textarea>
             </label>
             <label>
               Бюджет
-              <input type="range" min="50000" max="2000000" step="10000" value="650000" data-range="budget" />
+              <input type="range" name="budgetMax" min="50000" max="2000000" step="10000" value="650000" data-range="budget" />
               <div class="range-value" data-range-value>650 000 ₽</div>
             </label>
             <label>
@@ -94,7 +94,7 @@
             </label>
             <label class="full">
               Теги
-              <input type="text" placeholder="Финтех, лендинг, дизайн-система" />
+              <input type="text" name="tags" placeholder="Финтех, лендинг, дизайн-система" />
             </label>
           </div>
           <div class="form-actions">

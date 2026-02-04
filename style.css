@@ -495,6 +495,12 @@ body.is-modal-open {
   gap: 20px;
 }
 
+.feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
 .feed-header {
   display: flex;
   justify-content: space-between;
@@ -945,6 +951,20 @@ textarea {
   text-align: center;
   font-size: 13px;
   color: var(--muted);
+}
+
+.auth-error {
+  display: none;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.auth-error.is-visible {
+  display: block;
 }
 
 .muted {
