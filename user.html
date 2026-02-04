@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Moneyway — Лента</title>
+  <title>Moneyway — Профиль</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
-<body class="page-feed" data-page="feed">
+<body class="page-user" data-page="user">
   <div class="app-shell">
     <header class="topbar">
       <a class="topbar-brand brand" href="index.html" aria-label="Moneyway — Лента">
@@ -50,7 +50,7 @@
 
     <aside class="sidebar">
       <nav class="nav">
-        <a class="nav-link is-active" href="index.html"><i class="fa-solid fa-house"></i>Лента</a>
+        <a class="nav-link" href="index.html"><i class="fa-solid fa-house"></i>Лента</a>
         <a class="nav-link" href="profile.html" data-auth-required="1"><i class="fa-solid fa-user"></i>Профиль</a>
         <a class="nav-link" href="post.html" data-auth-required="1"><i class="fa-solid fa-pen"></i>Проекты</a>
         <a class="nav-link" href="messages.html" data-auth-required="1"><i class="fa-solid fa-comments"></i>Сообщения</a>
@@ -58,58 +58,47 @@
     </aside>
 
     <main class="content">
-      <section class="hero">
-        <div>
-          <h1>Находите проекты и специалистов в одном месте.</h1>
-          <p>Moneyway — соцсеть, где проекты выглядят как посты, а команды собираются быстро и без лишнего шума.</p>
-          <div class="hero-actions">
-            <button class="btn btn-primary">Смотреть ленту</button>
-            <button class="btn btn-secondary">Создать проект</button>
+      <section class="profile-hero">
+        <div class="profile-main">
+          <div class="avatar avatar-xl" id="userAvatar">?</div>
+          <div>
+            <h1 id="userName">Профиль</h1>
+            <div class="muted" id="userRole"></div>
           </div>
         </div>
-        <div class="hero-metrics">
-          <div class="metric">
-            <div class="metric-value" id="metricUsers">нет данных</div>
-            <div class="metric-label">Пользователей</div>
-          </div>
-          <div class="metric">
-            <div class="metric-value" id="metricProjectsToday">нет данных</div>
-            <div class="metric-label">Проектов сегодня</div>
-          </div>
-          <div class="metric">
-            <div class="metric-value" id="metricComments">нет данных</div>
-            <div class="metric-label">Комментариев</div>
-          </div>
+        <div class="profile-actions">
+          <button class="btn btn-primary" type="button" id="userFollowBtn" data-toggle="follow">Подписаться</button>
+          <a class="btn btn-secondary" id="userMessageBtn" href="messages.html">Написать</a>
         </div>
+      </section>
+
+      <section class="profile-stats">
+        <div class="stat">
+          <div class="stat-value" id="userStatProjects">0</div>
+          <div class="stat-label">Проекты</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="userStatFollowers">0</div>
+          <div class="stat-label">Подписчики</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="userStatRating">0</div>
+          <div class="stat-label">Рейтинг</div>
+        </div>
+      </section>
+
+      <section class="profile-about">
+        <h2>О себе</h2>
+        <p class="muted" id="userBio">Пользователь пока ничего не рассказал о себе.</p>
       </section>
 
       <section class="feed">
         <div class="feed-header">
-          <h2>Актуальные проекты</h2>
-          <div class="filters">
-            <button class="chip is-active">Все</button>
-            <button class="chip">Дизайн</button>
-            <button class="chip">Веб</button>
-            <button class="chip">Бренд</button>
-            <button class="chip">Продукт</button>
-          </div>
+          <h2>Проекты</h2>
         </div>
-        <div class="feed-list" id="feedList"></div>
+        <div class="feed-list" id="userProjectsList"></div>
       </section>
     </main>
-
-    <aside class="rightbar">
-      <div class="rightbar-card">
-        <h3>Рекомендации</h3>
-        <div class="muted" id="suggestedNote">Войдите, чтобы видеть рекомендации авторов.</div>
-        <div id="suggestedList" class="suggested-list"></div>
-      </div>
-
-      <div class="rightbar-card">
-        <h3>Ближайшие события</h3>
-        <div class="muted">Ближайших событий не планируется.</div>
-      </div>
-    </aside>
   </div>
 
   <script src="assets/js/app.js"></script>

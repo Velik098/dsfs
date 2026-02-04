@@ -90,7 +90,7 @@
             </label>
             <label>
               Срок
-              <input type="date" />
+              <input type="date" name="dueDate" />
             </label>
             <label class="full">
               Теги
@@ -98,12 +98,75 @@
             </label>
           </div>
           <div class="form-actions">
-            <button class="btn btn-ghost" type="button">Предпросмотр</button>
+            <button class="btn btn-ghost" type="button" data-action="preview-project">Предпросмотр</button>
             <button class="btn btn-primary" type="submit">Опубликовать</button>
           </div>
         </form>
       </section>
+
+      <section class="my-projects">
+        <div class="section-head">
+          <h2>Мои проекты</h2>
+          <p class="muted">Здесь можно быстро отредактировать или удалить ваши публикации.</p>
+        </div>
+        <div class="feed-list" id="myProjectsList"></div>
+      </section>
     </main>
+  </div>
+
+  <!-- Модалка предпросмотра -->
+  <div class="modal" id="projectPreviewModal" aria-hidden="true">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="projectPreviewTitle">
+      <div class="modal-header">
+        <h2 id="projectPreviewTitle">Предпросмотр</h2>
+        <button class="btn btn-ghost" type="button" aria-label="Закрыть" data-close-modal><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div id="projectPreviewBody"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" type="button" data-close-modal>Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка редактирования проекта -->
+  <div class="modal" id="projectEditModal" aria-hidden="true">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="projectEditTitle">
+      <div class="modal-header">
+        <h2 id="projectEditTitle">Редактировать проект</h2>
+        <button class="btn btn-ghost" type="button" aria-label="Закрыть" data-close-modal><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="projectEditForm">
+        <input type="hidden" name="id" />
+        <label>
+          Название
+          <input type="text" name="title" required />
+        </label>
+        <label>
+          Описание
+          <textarea name="body" rows="5" required></textarea>
+        </label>
+        <div class="form-grid compact">
+          <label>
+            Срок
+            <input type="date" name="dueDate" />
+          </label>
+          <label>
+            Бюджет до
+            <input type="number" name="budgetMax" min="0" step="1000" placeholder="Например: 650000" />
+          </label>
+          <label>
+            Теги
+            <input type="text" name="tags" placeholder="Финтех, лендинг, дизайн-система" />
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" type="button" data-close-modal>Отмена</button>
+          <button class="btn btn-primary" type="submit">Сохранить</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <script src="assets/js/app.js"></script>

@@ -71,15 +71,15 @@
         </div>
         <div class="profile-stats">
           <div>
-            <div class="stat-value">52</div>
+            <div class="stat-value" id="statProjects">0</div>
             <div class="stat-label">Проектов</div>
           </div>
           <div>
-            <div class="stat-value">18,4k</div>
+            <div class="stat-value" id="statFollowers">0</div>
             <div class="stat-label">Подписчиков</div>
           </div>
           <div>
-            <div class="stat-value">96%</div>
+            <div class="stat-value" id="statRating">0</div>
             <div class="stat-label">Рейтинг</div>
           </div>
           <button class="btn btn-secondary" type="button" data-action="edit-profile">Редактировать профиль</button>
@@ -88,39 +88,11 @@
 
       <section class="portfolio">
         <div class="feed-header">
-          <h2>Избранные работы</h2>
-          <button class="btn btn-ghost">Все работы</button>
+          <h2>Мои проекты</h2>
+          <a class="btn btn-ghost" href="post.html">Управлять проектами</a>
         </div>
 
-        <div class="grid">
-          <article class="work-card fade-in">
-            <div class="work-cover"></div>
-            <h3>Pulse: банковское приложение</h3>
-            <p>Пересобрали онбординг и торговые сценарии для мобильных пользователей.</p>
-            <div class="work-tags">
-              <span class="chip">Мобильный UX</span>
-              <span class="chip">Финтех</span>
-            </div>
-          </article>
-          <article class="work-card fade-in">
-            <div class="work-cover work-cover-alt"></div>
-            <h3>Айдентика Narra Studio</h3>
-            <p>Новая бренд-система, сайт и набор материалов для соцсетей.</p>
-            <div class="work-tags">
-              <span class="chip">Брендинг</span>
-              <span class="chip">Веб</span>
-            </div>
-          </article>
-          <article class="work-card fade-in">
-            <div class="work-cover work-cover-third"></div>
-            <h3>Панель Helio Health</h3>
-            <p>Аналитика и отчёты для операционных команд в медицине.</p>
-            <div class="work-tags">
-              <span class="chip">Дашборд</span>
-              <span class="chip">Данные</span>
-            </div>
-          </article>
-        </div>
+        <div class="feed-list" id="profileProjectsList"></div>
       </section>
     </main>
   </div>

@@ -12,6 +12,7 @@
   --shell-pad-x: 32px;
   --shell-pad-bottom: 32px;
   --topbar-bleed: 60px;
+  --search-width: 240px;
 }
 
 * {
@@ -172,9 +173,15 @@ button {
   border: 1px solid var(--border);
   padding: 4px 10px;
   border-radius: 999px;
-  width: min(280px, 100%);
-  max-width: 280px;
-  flex: 0 1 280px;
+  width: min(var(--search-width), 100%);
+  max-width: var(--search-width);
+  flex: 0 1 var(--search-width);
+}
+
+.search.search--compact {
+  width: 100%;
+  max-width: none;
+  flex: 1 1 auto;
 }
 
 .search input {
@@ -190,6 +197,34 @@ button {
   align-items: center;
   gap: 10px;
   flex: 0 0 auto;
+}
+
+.auth-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Гость: показываем вход/регистрацию, скрываем меню профиля */
+body:not(.is-authed) .profile-menu {
+  display: none;
+}
+
+/* Авторизован: скрываем вход/регистрацию */
+body.is-authed .auth-actions {
+  display: none;
+}
+
+/* Гость: слегка "приглушаем" пункты меню, которые требуют вход */
+body:not(.is-authed) a.nav-link[data-auth-required="1"] {
+  opacity: 0.55;
+}
+
+body:not(.is-authed) a.nav-link[data-auth-required="1"]::after {
+  content: " · вход";
+  color: var(--muted);
+  font-size: 12px;
+  margin-left: 6px;
 }
 
 .profile-menu {
@@ -334,6 +369,71 @@ body.is-modal-open {
   gap: 24px;
 }
 
+.suggested-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+#suggestedNote:empty {
+  display: none;
+}
+
+.section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.my-projects {
+  padding: 20px;
+}
+
+.form-grid.compact {
+  gap: 12px;
+}
+
+.comments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.comment-item {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: #0f1419;
+  border: 1px solid var(--border);
+}
+
+.comment-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+
+.comment-author {
+  font-weight: 600;
+}
+
+.comment-time {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
 /* Cards */
 .glass,
 .sidebar-card,
@@ -345,6 +445,7 @@ body.is-modal-open {
 .work-card,
 .create-hero,
 .create-form,
+.my-projects,
 .messages-list,
 .chat-panel,
 .settings-card,
@@ -437,6 +538,16 @@ body.is-modal-open {
 
 .btn-primary:hover {
   background: #1691e6;
+}
+
+.btn.is-danger {
+  border-color: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.btn.is-danger:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .btn-block {
@@ -575,6 +686,18 @@ body.is-modal-open {
 
 .budget {
   font-weight: 600;
+}
+
+.budget-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.budget-meta {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 400;
 }
 
 .post-actions {
@@ -747,6 +870,51 @@ textarea {
   gap: 12px;
 }
 
+.dialog-search {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.people-results {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.people-results.is-visible {
+  display: flex;
+}
+
+.people-item {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  background: #0f1419;
+  border: 1px solid var(--border);
+  width: 100%;
+  text-align: left;
+}
+
+.people-name {
+  font-weight: 600;
+}
+
+.people-role {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.people-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
 .list-header {
   display: flex;
   justify-content: space-between;
@@ -762,6 +930,8 @@ textarea {
   border-radius: var(--radius-md);
   background: #0f1419;
   border: 1px solid var(--border);
+  width: 100%;
+  text-align: left;
 }
 
 .conversation.is-active {

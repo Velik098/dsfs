@@ -60,39 +60,23 @@
           <button class="btn btn-ghost" aria-label="Фильтр"><i class="fa-solid fa-filter"></i></button>
         </div>
 
-        <div class="conversation is-active">
-          <div class="avatar">СК</div>
-          <div>
-            <div class="conversation-name">Студия Киро</div>
-            <div class="conversation-preview">Сможем сегодня согласовать мудборд?</div>
+        <div class="dialog-search">
+          <div class="search search--compact">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="search" id="peopleSearch" placeholder="Поиск людей для сообщения" autocomplete="off" />
           </div>
-          <span class="conversation-time">2 мин</span>
+          <div class="people-results" id="peopleResults" aria-label="Результаты поиска"></div>
         </div>
 
-        <div class="conversation">
-          <div class="avatar">ЛН</div>
-          <div>
-            <div class="conversation-name">Лев Нэш</div>
-            <div class="conversation-preview">Собрал набор экранов, могу показать.</div>
-          </div>
-          <span class="conversation-time">1 ч</span>
-        </div>
-
-        <div class="conversation">
-          <div class="avatar">МГ</div>
-          <div>
-            <div class="conversation-name">Майя Грин</div>
-            <div class="conversation-preview">Скинула варианты анимации и переходов.</div>
-          </div>
-          <span class="conversation-time">3 ч</span>
-        </div>
+        <div class="muted" id="dialogsEmpty">Пока нет диалогов. Откройте профиль пользователя и нажмите «Написать».</div>
+        <div id="dialogsList"></div>
       </section>
 
       <section class="chat-panel">
         <div class="chat-header">
           <div>
-            <div class="chat-name">Студия Киро</div>
-            <div class="chat-status">Сейчас онлайн</div>
+            <div class="chat-name" id="chatName">Выберите диалог</div>
+            <div class="chat-status muted" id="chatStatus"></div>
           </div>
           <div class="chat-actions">
             <button class="btn btn-ghost" aria-label="Видеозвонок"><i class="fa-solid fa-video"></i></button>
@@ -101,23 +85,10 @@
           </div>
         </div>
 
-        <div class="chat-thread" id="chatThread">
-          <div class="chat-bubble incoming">
-            Привет! Сможем сегодня согласовать мудборд и сроки?
-            <span class="chat-time">09:24</span>
-          </div>
-          <div class="chat-bubble outgoing">
-            Да, конечно. Сейчас накидаю варианты и можем созвониться в 14:00.
-            <span class="chat-time">09:26</span>
-          </div>
-          <div class="chat-bubble incoming">
-            Отлично. По стилю — мягче и спокойнее или контрастнее?
-            <span class="chat-time">09:27</span>
-          </div>
-        </div>
+        <div class="chat-thread" id="chatThread"></div>
 
         <form class="chat-input" id="chatForm">
-          <input type="text" placeholder="Написать сообщение" id="chatMessage" />
+          <input type="text" placeholder="Написать сообщение" id="chatMessage" autocomplete="off" />
           <button class="btn btn-primary" type="submit">Отправить</button>
         </form>
       </section>
