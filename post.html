@@ -1,107 +1,105 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Moneyway Social � Create Post</title>
+  <title>Moneyway — Проекты</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
-  <link rel="stylesheet" href="assets/css/style.css" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body class="page-create" data-page="create">
-  <div class="bg-orb bg-orb-a"></div>
-  <div class="bg-orb bg-orb-b"></div>
-  <div class="bg-grid"></div>
-
   <div class="app-shell">
-    <aside class="sidebar">
-      <div class="brand">
+    <header class="topbar">
+      <a class="topbar-brand brand" href="index.html" aria-label="Moneyway — Лента">
         <div class="brand-icon">MW</div>
         <div>
           <div class="brand-title">Moneyway</div>
-          <div class="brand-subtitle">Social Freelance</div>
+          <div class="brand-subtitle">Социальная фриланс-сеть</div>
         </div>
-      </div>
+      </a>
 
-      <nav class="nav">
-        <a class="nav-link" href="index.html"><i class="fa-solid fa-house"></i>Feed</a>
-        <a class="nav-link" href="profile.html"><i class="fa-solid fa-user"></i>Profile</a>
-        <a class="nav-link is-active" href="post.html"><i class="fa-solid fa-pen"></i>Create</a>
-        <a class="nav-link" href="messages.html"><i class="fa-solid fa-comments"></i>Messages</a>
-        <a class="nav-link" href="settings.html"><i class="fa-solid fa-gear"></i>Settings</a>
-      </nav>
-
-      <div class="sidebar-card glass">
-        <div class="avatar avatar-lg">AL</div>
-        <div class="user-meta">
-          <div class="user-name">Aline Moore</div>
-          <div class="user-role">Product Designer</div>
+      <div class="topbar-center">
+        <div class="search">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="search" placeholder="Поиск проектов, людей, тегов" />
         </div>
-        <button class="btn btn-primary">Draft Brief</button>
-      </div>
-    </aside>
 
-    <header class="topbar glass">
-      <div class="search">
-        <i class="fa-solid fa-magnifying-glass"></i>
-        <input type="search" placeholder="Search projects, creators, tags" />
-      </div>
-      <div class="topbar-actions">
-        <button class="btn btn-ghost"><i class="fa-regular fa-bell"></i></button>
-        <button class="btn btn-ghost"><i class="fa-regular fa-message"></i></button>
-        <div class="avatar">AL</div>
+        <div class="topbar-actions">
+          <button class="btn btn-ghost" aria-label="Уведомления"><i class="fa-regular fa-bell"></i></button>
+          <button class="btn btn-ghost" aria-label="Сообщения"><i class="fa-regular fa-message"></i></button>
+          <div class="profile-menu" data-profile-menu>
+            <button class="avatar avatar-button" type="button" aria-label="Меню профиля" aria-haspopup="menu" aria-expanded="false" data-profile-menu-button>Я</button>
+            <div class="profile-dropdown" role="menu" aria-label="Профиль" data-profile-menu-dropdown>
+              <a class="menu-item" role="menuitem" href="profile.html#edit-profile"><i class="fa-solid fa-user-gear"></i>Управление аккаунтом</a>
+              <a class="menu-item" role="menuitem" href="settings.html"><i class="fa-solid fa-gear"></i>Настройки</a>
+              <div class="menu-sep" role="separator"></div>
+              <button class="menu-item" type="button" role="menuitem" data-action="switch-account"><i class="fa-solid fa-right-left"></i>Сменить аккаунт</button>
+              <button class="menu-item" type="button" role="menuitem" data-action="logout"><i class="fa-solid fa-right-from-bracket"></i>Выйти</button>
+            </div>
+          </div>
+        </div>
       </div>
     </header>
 
+    <aside class="sidebar">
+      <nav class="nav">
+        <a class="nav-link" href="index.html"><i class="fa-solid fa-house"></i>Лента</a>
+        <a class="nav-link" href="profile.html"><i class="fa-solid fa-user"></i>Профиль</a>
+        <a class="nav-link is-active" href="post.html"><i class="fa-solid fa-pen"></i>Проекты</a>
+        <a class="nav-link" href="messages.html"><i class="fa-solid fa-comments"></i>Сообщения</a>
+      </nav>
+    </aside>
+
     <main class="content">
-      <section class="create-hero glass">
+      <section class="create-hero">
         <div>
-          <h1>Create a new brief</h1>
-          <p>Share your project like a post. Attract the right creators quickly.</p>
+          <h1>Проекты</h1>
+          <p>Создавайте и публикуйте проекты — так их быстрее увидят нужные специалисты.</p>
         </div>
-        <button class="btn btn-secondary">Save draft</button>
+        <button class="btn btn-secondary">Сохранить черновик</button>
       </section>
 
-      <section class="create-form glass">
+      <section class="create-form">
         <form>
           <div class="form-grid">
             <label>
-              Project title
-              <input type="text" placeholder="Premium fintech onboarding" />
+              Название
+              <input type="text" placeholder="Онбординг для финтех-приложения" />
             </label>
             <label>
-              Category
+              Категория
               <select>
-                <option>Branding</option>
-                <option>UI / UX</option>
-                <option>Web build</option>
-                <option>Motion</option>
-                <option>Product Strategy</option>
+                <option>Брендинг</option>
+                <option>Интерфейсы</option>
+                <option>Веб</option>
+                <option>Анимация</option>
+                <option>Продукт</option>
               </select>
             </label>
             <label class="full">
-              Project summary
-              <textarea rows="4" placeholder="Describe the scope, goals, and timeline."></textarea>
+              Описание
+              <textarea rows="4" placeholder="Коротко опишите задачу, объём работ и ожидания по срокам."></textarea>
             </label>
             <label>
-              Budget range
-              <input type="range" min="2000" max="20000" value="6500" data-range="budget" />
-              <div class="range-value" data-range-value>$6,500</div>
+              Бюджет
+              <input type="range" min="50000" max="2000000" step="10000" value="650000" data-range="budget" />
+              <div class="range-value" data-range-value>650 000 ₽</div>
             </label>
             <label>
-              Deadline
+              Срок
               <input type="date" />
             </label>
             <label class="full">
-              Tags
-              <input type="text" placeholder="Fintech, UI Kit, Webflow" />
+              Теги
+              <input type="text" placeholder="Финтех, лендинг, дизайн-система" />
             </label>
           </div>
           <div class="form-actions">
-            <button class="btn btn-ghost" type="button">Preview</button>
-            <button class="btn btn-primary" type="submit">Publish</button>
+            <button class="btn btn-ghost" type="button">Предпросмотр</button>
+            <button class="btn btn-primary" type="submit">Опубликовать</button>
           </div>
         </form>
       </section>

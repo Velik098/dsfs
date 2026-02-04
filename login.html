@@ -1,54 +1,52 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Moneyway Social � Login</title>
+  <title>Moneyway — Вход</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
-  <link rel="stylesheet" href="assets/css/style.css" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body class="page-auth" data-page="login">
-  <div class="bg-orb bg-orb-a"></div>
-  <div class="bg-orb bg-orb-b"></div>
-  <div class="bg-grid"></div>
-
   <main class="auth">
-    <div class="auth-card glass">
+    <div class="auth-card">
       <div class="brand auth-brand">
         <div class="brand-icon">MW</div>
         <div>
           <div class="brand-title">Moneyway</div>
-          <div class="brand-subtitle">Welcome back</div>
+          <div class="brand-subtitle">Вход в аккаунт</div>
         </div>
       </div>
-      <h1>Sign in to continue</h1>
-      <p class="muted">Access your projects, messages, and community.</p>
+
+      <h1>Войти</h1>
+      <p class="muted">Доступ к ленте, сообщениям и проектам.</p>
 
       <form class="auth-form">
         <label>
-          Email
+          Почта
           <input type="email" placeholder="you@studio.com" required />
         </label>
         <label>
-          Password
-          <input type="password" placeholder="��������" required />
+          Пароль
+          <input type="password" placeholder="Введите пароль" required />
         </label>
         <div class="auth-row">
           <label class="checkbox">
             <input type="checkbox" />
-            <span>Keep me signed in</span>
+            <span>Не выходить</span>
           </label>
-          <a href="#">Forgot password?</a>
+          <a href="#">Забыли пароль?</a>
         </div>
-        <button class="btn btn-primary btn-block" type="submit">Sign In</button>
-        <button class="btn btn-secondary btn-block" type="button"><i class="fa-brands fa-google"></i> Continue with Google</button>
+
+        <button class="btn btn-primary btn-block" type="submit">Войти</button>
+        <button class="btn btn-secondary btn-block" type="button"><i class="fa-brands fa-google"></i> Войти через Google</button>
       </form>
 
       <div class="auth-footer">
-        New here? <a href="register.html">Create an account</a>
+        Нет аккаунта? <a href="register.html">Зарегистрироваться</a>
       </div>
     </div>
   </main>

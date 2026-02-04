@@ -1,61 +1,59 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Moneyway Social � Register</title>
+  <title>Moneyway — Регистрация</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
-  <link rel="stylesheet" href="assets/css/style.css" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body class="page-auth" data-page="register">
-  <div class="bg-orb bg-orb-a"></div>
-  <div class="bg-orb bg-orb-b"></div>
-  <div class="bg-grid"></div>
-
   <main class="auth">
-    <div class="auth-card glass">
+    <div class="auth-card">
       <div class="brand auth-brand">
         <div class="brand-icon">MW</div>
         <div>
           <div class="brand-title">Moneyway</div>
-          <div class="brand-subtitle">Join the social freelance wave</div>
+          <div class="brand-subtitle">Регистрация</div>
         </div>
       </div>
-      <h1>Create your account</h1>
-      <p class="muted">Build a profile that looks like your best work.</p>
+
+      <h1>Создать аккаунт</h1>
+      <p class="muted">Соберите профиль, чтобы публиковать проекты и общаться.</p>
 
       <form class="auth-form">
         <label>
-          Full name
-          <input type="text" placeholder="Aline Moore" required />
+          Имя
+          <input type="text" placeholder="Иван Иванов" required />
         </label>
         <label>
-          Email
+          Почта
           <input type="email" placeholder="you@studio.com" required />
         </label>
         <label>
-          Password
-          <input type="password" placeholder="At least 8 characters" required />
+          Пароль
+          <input type="password" placeholder="Минимум 8 символов" required />
         </label>
         <label>
-          Role
+          Роль
           <select>
-            <option>Designer</option>
-            <option>Developer</option>
-            <option>Strategist</option>
-            <option>Motion</option>
-            <option>Writer</option>
+            <option>Дизайнер</option>
+            <option>Разработчик</option>
+            <option>Менеджер</option>
+            <option>Маркетолог</option>
+            <option>Автор</option>
           </select>
         </label>
-        <button class="btn btn-primary btn-block" type="submit">Create Account</button>
-        <button class="btn btn-secondary btn-block" type="button"><i class="fa-brands fa-github"></i> Continue with GitHub</button>
+
+        <button class="btn btn-primary btn-block" type="submit">Создать аккаунт</button>
+        <button class="btn btn-secondary btn-block" type="button"><i class="fa-brands fa-github"></i> Продолжить с GitHub</button>
       </form>
 
       <div class="auth-footer">
-        Already have an account? <a href="login.html">Sign in</a>
+        Уже есть аккаунт? <a href="login.html">Войти</a>
       </div>
     </div>
   </main>

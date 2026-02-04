@@ -9,6 +9,9 @@
   --radius-lg: 16px;
   --radius-md: 12px;
   --radius-sm: 10px;
+  --shell-pad-x: 32px;
+  --shell-pad-bottom: 32px;
+  --topbar-bleed: 60px;
 }
 
 * {
@@ -49,11 +52,15 @@ button {
 .app-shell {
   display: grid;
   grid-template-columns: 260px 1fr 320px;
-  gap: 24px;
-  padding: 32px;
+  grid-template-rows: auto 1fr;
+  column-gap: 24px;
+  row-gap: 12px;
+  padding: 0 var(--shell-pad-x) var(--shell-pad-bottom);
 }
 
 .sidebar {
+  grid-column: 1;
+  grid-row: 2;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -113,18 +120,48 @@ button {
 }
 
 .topbar {
-  grid-column: 2 / -1;
+  grid-column: 1 / -1;
+  grid-row: 1;
   position: sticky;
   top: 0;
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  /* minmax(0, 1fr) = центр всегда по центру, даже если слева есть бренд */
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: 12px;
-  padding: 10px 14px;
-  border-radius: var(--radius-md);
+  padding: 8px 0;
+  z-index: 2;
+  isolation: isolate;
+}
+
+.topbar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  /* Фон + рамка растягиваются симметрично относительно контента,
+     без использования vw (чтобы не было сдвигов из-за скроллбара). */
+  left: calc(-1 * (var(--shell-pad-x) + var(--topbar-bleed)));
+  right: calc(-1 * (var(--shell-pad-x) + var(--topbar-bleed)));
+
   background: var(--card);
   border: 1px solid var(--border);
-  z-index: 2;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  box-shadow: var(--shadow);
+  z-index: -1;
+}
+
+.topbar-brand {
+  grid-column: 1;
+  justify-self: start;
+}
+
+.topbar-center {
+  grid-column: 2;
+  justify-self: center;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .search {
@@ -133,10 +170,11 @@ button {
   gap: 8px;
   background: #0f1419;
   border: 1px solid var(--border);
-  padding: 6px 10px;
+  padding: 4px 10px;
   border-radius: 999px;
-  flex: 1;
-  max-width: 520px;
+  width: min(280px, 100%);
+  max-width: 280px;
+  flex: 0 1 280px;
 }
 
 .search input {
@@ -151,16 +189,146 @@ button {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: 0 0 auto;
+}
+
+.profile-menu {
+  position: relative;
+}
+
+.avatar-button {
+  cursor: pointer;
+}
+
+.avatar-button:hover {
+  background: #2a2f36;
+}
+
+.avatar-button:focus-visible {
+  outline: 2px solid rgba(29, 155, 240, 0.5);
+  outline-offset: 2px;
+}
+
+.profile-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: max-content;
+  min-width: 240px;
+  max-width: calc(100vw - 24px);
+  padding: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+  z-index: 20;
+  display: none;
+}
+
+.profile-menu.is-open .profile-dropdown {
+  display: block;
+}
+
+.menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  color: var(--text);
+  transition: background 0.15s ease;
+  text-align: left;
+}
+
+.menu-item i {
+  width: 18px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.menu-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.menu-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 4px;
+}
+
+body.is-modal-open {
+  overflow: hidden;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: none;
+  place-items: center;
+  padding: 20px;
+}
+
+.modal.is-open {
+  display: grid;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.modal-dialog {
+  position: relative;
+  width: min(560px, 92vw);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-header h2 {
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 6px;
 }
 
 .content {
-  grid-column: 2 / span 1;
+  grid-column: 2;
+  grid-row: 2;
   display: flex;
   flex-direction: column;
   gap: 24px;
 }
 
+/* Если на странице нет правой колонки, отдаём контенту её место */
+.app-shell:not(:has(.rightbar)) .content {
+  grid-column: 2 / -1;
+}
+
 .rightbar {
+  grid-column: 3;
+  grid-row: 2;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -794,23 +962,35 @@ textarea {
 }
 
 @media (max-width: 960px) {
+  :root {
+    --shell-pad-x: 20px;
+    --shell-pad-bottom: 20px;
+    --topbar-bleed: 40px;
+  }
+
   .app-shell {
     grid-template-columns: 1fr;
-    padding: 20px;
+    grid-template-rows: auto auto 1fr;
+    row-gap: 12px;
+    padding: 0 var(--shell-pad-x) var(--shell-pad-bottom);
   }
 
   .sidebar {
+    grid-column: 1;
+    grid-row: 2;
     flex-direction: row;
     flex-wrap: wrap;
     justify-content: space-between;
   }
 
   .topbar {
-    grid-column: 1 / -1;
+    grid-column: 1;
+    grid-row: 1;
   }
 
   .content {
-    grid-column: 1 / -1;
+    grid-column: 1;
+    grid-row: 3;
   }
 }
 
@@ -829,6 +1009,31 @@ textarea {
   }
 
   .topbar {
-    position: static;
+    grid-template-columns: 1fr;
+    row-gap: 10px;
+  }
+
+  .topbar-brand {
+    grid-column: 1;
+    justify-self: center;
+    text-align: center;
+  }
+
+  .topbar-center {
+    grid-column: 1;
+    justify-self: stretch;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .search {
+    max-width: none;
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    justify-content: center;
   }
 }

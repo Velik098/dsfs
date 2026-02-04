@@ -1,130 +1,158 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Moneyway Social � Profile</title>
+  <title>Moneyway — Профиль</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
-  <link rel="stylesheet" href="assets/css/style.css" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body class="page-profile" data-page="profile">
-  <div class="bg-orb bg-orb-a"></div>
-  <div class="bg-orb bg-orb-b"></div>
-  <div class="bg-grid"></div>
-
   <div class="app-shell">
-    <aside class="sidebar">
-      <div class="brand">
+    <header class="topbar">
+      <a class="topbar-brand brand" href="index.html" aria-label="Moneyway — Лента">
         <div class="brand-icon">MW</div>
         <div>
           <div class="brand-title">Moneyway</div>
-          <div class="brand-subtitle">Social Freelance</div>
+          <div class="brand-subtitle">Социальная фриланс-сеть</div>
         </div>
-      </div>
+      </a>
 
-      <nav class="nav">
-        <a class="nav-link" href="index.html"><i class="fa-solid fa-house"></i>Feed</a>
-        <a class="nav-link is-active" href="profile.html"><i class="fa-solid fa-user"></i>Profile</a>
-        <a class="nav-link" href="post.html"><i class="fa-solid fa-pen"></i>Create</a>
-        <a class="nav-link" href="messages.html"><i class="fa-solid fa-comments"></i>Messages</a>
-        <a class="nav-link" href="settings.html"><i class="fa-solid fa-gear"></i>Settings</a>
-      </nav>
-
-      <div class="sidebar-card glass">
-        <div class="avatar avatar-lg">AL</div>
-        <div class="user-meta">
-          <div class="user-name">Aline Moore</div>
-          <div class="user-role">Product Designer</div>
+      <div class="topbar-center">
+        <div class="search">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="search" placeholder="Поиск проектов, людей, тегов" />
         </div>
-        <button class="btn btn-primary" data-toggle="follow">Follow</button>
-      </div>
-    </aside>
 
-    <header class="topbar glass">
-      <div class="search">
-        <i class="fa-solid fa-magnifying-glass"></i>
-        <input type="search" placeholder="Search projects, creators, tags" />
-      </div>
-      <div class="topbar-actions">
-        <button class="btn btn-ghost"><i class="fa-regular fa-bell"></i></button>
-        <button class="btn btn-ghost"><i class="fa-regular fa-message"></i></button>
-        <div class="avatar">AL</div>
+        <div class="topbar-actions">
+          <button class="btn btn-ghost" aria-label="Уведомления"><i class="fa-regular fa-bell"></i></button>
+          <button class="btn btn-ghost" aria-label="Сообщения"><i class="fa-regular fa-message"></i></button>
+          <div class="profile-menu" data-profile-menu>
+            <button class="avatar avatar-button" type="button" aria-label="Меню профиля" aria-haspopup="menu" aria-expanded="false" data-profile-menu-button>Я</button>
+            <div class="profile-dropdown" role="menu" aria-label="Профиль" data-profile-menu-dropdown>
+              <a class="menu-item" role="menuitem" href="profile.html#edit-profile"><i class="fa-solid fa-user-gear"></i>Управление аккаунтом</a>
+              <a class="menu-item" role="menuitem" href="settings.html"><i class="fa-solid fa-gear"></i>Настройки</a>
+              <div class="menu-sep" role="separator"></div>
+              <button class="menu-item" type="button" role="menuitem" data-action="switch-account"><i class="fa-solid fa-right-left"></i>Сменить аккаунт</button>
+              <button class="menu-item" type="button" role="menuitem" data-action="logout"><i class="fa-solid fa-right-from-bracket"></i>Выйти</button>
+            </div>
+          </div>
+        </div>
       </div>
     </header>
 
+    <aside class="sidebar">
+      <nav class="nav">
+        <a class="nav-link" href="index.html"><i class="fa-solid fa-house"></i>Лента</a>
+        <a class="nav-link is-active" href="profile.html"><i class="fa-solid fa-user"></i>Профиль</a>
+        <a class="nav-link" href="post.html"><i class="fa-solid fa-pen"></i>Проекты</a>
+        <a class="nav-link" href="messages.html"><i class="fa-solid fa-comments"></i>Сообщения</a>
+      </nav>
+    </aside>
+
     <main class="content">
-      <section class="profile-hero glass">
+      <section class="profile-hero">
         <div class="profile-main">
-          <div class="avatar avatar-xl">AL</div>
+          <div class="avatar avatar-xl" id="profileAvatar">АМ</div>
           <div>
-            <h1>Aline Moore</h1>
-            <div class="profile-role">Product Designer � Remote</div>
-            <p class="muted">I design product experiences that feel premium, from first click to long-term retention. Open to brand new fintech and AI products.</p>
+            <h1 id="profileName">Артём Мельников</h1>
+            <div class="profile-role" id="profileRole">Продуктовый дизайнер · удалённо</div>
+            <p class="muted" id="profileBio">Проектирую интерфейсы, которые легко читать и приятно использовать: от первых экранов до сценариев удержания. Открыт к финтеху и сложным продуктам.</p>
             <div class="profile-tags">
-              <span class="chip">UX Strategy</span>
-              <span class="chip">Design Systems</span>
-              <span class="chip">Fintech</span>
-              <span class="chip">Figma</span>
+              <span class="chip">Дизайн-системы</span>
+              <span class="chip">Исследования</span>
+              <span class="chip">Финтех</span>
+              <span class="chip">Прототипирование</span>
             </div>
           </div>
         </div>
         <div class="profile-stats">
           <div>
             <div class="stat-value">52</div>
-            <div class="stat-label">Projects</div>
+            <div class="stat-label">Проектов</div>
           </div>
           <div>
-            <div class="stat-value">18.4k</div>
-            <div class="stat-label">Followers</div>
+            <div class="stat-value">18,4k</div>
+            <div class="stat-label">Подписчиков</div>
           </div>
           <div>
             <div class="stat-value">96%</div>
-            <div class="stat-label">Client score</div>
+            <div class="stat-label">Рейтинг</div>
           </div>
-          <button class="btn btn-primary" data-toggle="follow">Follow</button>
+          <button class="btn btn-secondary" type="button" data-action="edit-profile">Редактировать профиль</button>
         </div>
       </section>
 
       <section class="portfolio">
         <div class="feed-header">
-          <h2>Featured work</h2>
-          <button class="btn btn-ghost">View all</button>
+          <h2>Избранные работы</h2>
+          <button class="btn btn-ghost">Все работы</button>
         </div>
 
         <div class="grid">
-          <article class="work-card glass fade-in">
+          <article class="work-card fade-in">
             <div class="work-cover"></div>
-            <h3>Pulse Banking App</h3>
-            <p>Rebuilt onboarding and trading flows for mobile-first clients.</p>
+            <h3>Pulse: банковское приложение</h3>
+            <p>Пересобрали онбординг и торговые сценарии для мобильных пользователей.</p>
             <div class="work-tags">
-              <span class="chip">Mobile UX</span>
-              <span class="chip">Fintech</span>
+              <span class="chip">Мобильный UX</span>
+              <span class="chip">Финтех</span>
             </div>
           </article>
-          <article class="work-card glass fade-in">
+          <article class="work-card fade-in">
             <div class="work-cover work-cover-alt"></div>
-            <h3>Narra Studio Identity</h3>
-            <p>New brand system, editorial site, and social toolkit.</p>
+            <h3>Айдентика Narra Studio</h3>
+            <p>Новая бренд-система, сайт и набор материалов для соцсетей.</p>
             <div class="work-tags">
-              <span class="chip">Branding</span>
-              <span class="chip">Web</span>
+              <span class="chip">Брендинг</span>
+              <span class="chip">Веб</span>
             </div>
           </article>
-          <article class="work-card glass fade-in">
+          <article class="work-card fade-in">
             <div class="work-cover work-cover-third"></div>
-            <h3>Helio Health Dashboard</h3>
-            <p>Analytics suite for healthcare operations teams.</p>
+            <h3>Панель Helio Health</h3>
+            <p>Аналитика и отчёты для операционных команд в медицине.</p>
             <div class="work-tags">
-              <span class="chip">Dashboard</span>
-              <span class="chip">Data Viz</span>
+              <span class="chip">Дашборд</span>
+              <span class="chip">Данные</span>
             </div>
           </article>
         </div>
       </section>
     </main>
+  </div>
+
+  <div class="modal" id="editProfileModal" aria-hidden="true">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="editProfileTitle">
+      <div class="modal-header">
+        <h2 id="editProfileTitle">Редактировать профиль</h2>
+        <button class="btn btn-ghost" type="button" aria-label="Закрыть" data-close-modal><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <form id="editProfileForm">
+        <label>
+          Имя
+          <input type="text" name="name" value="Артём Мельников" autocomplete="name" />
+        </label>
+        <label>
+          Роль
+          <input type="text" name="role" value="Продуктовый дизайнер · удалённо" />
+        </label>
+        <label>
+          О себе
+          <textarea name="bio" rows="4">Проектирую интерфейсы, которые легко читать и приятно использовать: от первых экранов до сценариев удержания. Открыт к финтеху и сложным продуктам.</textarea>
+        </label>
+
+        <div class="modal-actions">
+          <button class="btn btn-ghost" type="button" data-close-modal>Отмена</button>
+          <button class="btn btn-primary" type="submit">Сохранить</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <script src="assets/js/app.js"></script>
