@@ -64,6 +64,35 @@ function ensureSchema() {
     safeExec("PRAGMA foreign_keys = ON;");
   }
 
+  // Если в БД уже были таблицы с такими именами, но с другой схемой (например, из старой версии),
+  // откладываем их в legacy, чтобы не падать при старте.
+  const existingConvCols = getTableColumns("conversations");
+  if (existingConvCols.size > 0 && (!existingConvCols.has("user1_id") || !existingConvCols.has("user2_id"))) {
+    safeExec("PRAGMA foreign_keys = OFF;");
+    const legacy = `conversations_legacy_${Date.now()}`;
+    safeExec(`ALTER TABLE conversations RENAME TO ${legacy};`);
+    safeExec("PRAGMA foreign_keys = ON;");
+  }
+
+  const existingReadsCols = getTableColumns("conversation_reads");
+  if (
+    existingReadsCols.size > 0 &&
+    (!existingReadsCols.has("conversation_id") || !existingReadsCols.has("user_id") || !existingReadsCols.has("last_read_message_id"))
+  ) {
+    safeExec("PRAGMA foreign_keys = OFF;");
+    const legacy = `conversation_reads_legacy_${Date.now()}`;
+    safeExec(`ALTER TABLE conversation_reads RENAME TO ${legacy};`);
+    safeExec("PRAGMA foreign_keys = ON;");
+  }
+
+  const existingNotifCols = getTableColumns("notifications");
+  if (existingNotifCols.size > 0 && (!existingNotifCols.has("user_id") || !existingNotifCols.has("type") || !existingNotifCols.has("created_at"))) {
+    safeExec("PRAGMA foreign_keys = OFF;");
+    const legacy = `notifications_legacy_${Date.now()}`;
+    safeExec(`ALTER TABLE notifications RENAME TO ${legacy};`);
+    safeExec("PRAGMA foreign_keys = ON;");
+  }
+
   const existingUserCols = getTableColumns("users");
   const mustRebuildUsers =
     existingUserCols.size > 0 &&
@@ -210,6 +239,16 @@ function ensureSchema() {
       FOREIGN KEY(user2_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS conversation_reads (
+      conversation_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      last_read_message_id INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (conversation_id, user_id),
+      FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       conversation_id INTEGER NOT NULL,
@@ -218,6 +257,21 @@ function ensureSchema() {
       created_at INTEGER NOT NULL,
       FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
       FOREIGN KEY(sender_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      actor_id INTEGER,
+      project_id INTEGER,
+      comment_id INTEGER,
+      created_at INTEGER NOT NULL,
+      read_at INTEGER,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(actor_id) REFERENCES users(id) ON DELETE SET NULL,
+      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY(comment_id) REFERENCES comments(id) ON DELETE CASCADE
     );
   `);
 
@@ -241,6 +295,9 @@ function ensureSchema() {
   if (msgCols.has("conversation_id") && msgCols.has("created_at")) {
     safeExec("CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at);");
   }
+
+  safeExec("CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(user_id, created_at);");
+  safeExec("CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read_at);");
 }
 
 async function openDb() {

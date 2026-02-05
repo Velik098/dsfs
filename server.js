@@ -97,6 +97,45 @@ async function getUserStats(userId) {
   };
 }
 
+async function upsertConversationRead(userId, conversationId, lastReadMessageId) {
+  const last = Number(lastReadMessageId || 0);
+  if (!Number.isFinite(last) || last <= 0) return;
+
+  const existing = await db.get(
+    "SELECT last_read_message_id AS lastRead FROM conversation_reads WHERE conversation_id = ? AND user_id = ?",
+    [conversationId, userId],
+  );
+
+  const next = Math.max(Number(existing?.lastRead || 0), last);
+  await db.run(
+    "INSERT OR REPLACE INTO conversation_reads (conversation_id, user_id, last_read_message_id, updated_at) VALUES (?, ?, ?, ?)",
+    [conversationId, userId, next, Date.now()],
+  );
+}
+
+async function getUnreadMessageCount(userId) {
+  const meId = Number(userId);
+  const row = await db.get(
+    `
+    SELECT COUNT(*) AS c
+    FROM messages m
+    JOIN conversations c ON c.id = m.conversation_id
+    LEFT JOIN conversation_reads r ON r.conversation_id = c.id AND r.user_id = ?
+    WHERE
+      (c.user1_id = ? OR c.user2_id = ?)
+      AND m.sender_id != ?
+      AND m.id > COALESCE(r.last_read_message_id, 0)
+    `,
+    [meId, meId, meId, meId],
+  );
+  return Number(row?.c || 0);
+}
+
+async function getUnreadNotificationCount(userId) {
+  const row = await db.get("SELECT COUNT(*) AS c FROM notifications WHERE user_id = ? AND read_at IS NULL", [userId]);
+  return Number(row?.c || 0);
+}
+
 async function getNextUserId() {
   // Если в БД уже есть демо-данные (projects/follows/likes), но таблица users пустая/сброшена,
   // новый пользователь может получить id=1 и "унаследовать" чужие проекты/подписки.
@@ -342,6 +381,46 @@ async function main() {
     });
   });
 
+  // --- API: BADGES (циферки для шапки) ---
+  app.get("/api/badges", requireAuth, async (req, res) => {
+    const messagesUnread = await getUnreadMessageCount(req.user.id);
+    const notificationsUnread = await getUnreadNotificationCount(req.user.id);
+    res.json({ ok: true, messagesUnread, notificationsUnread });
+  });
+
+  // --- API: NOTIFICATIONS ---
+  app.get("/api/notifications", requireAuth, async (req, res) => {
+    const limit = Math.max(1, Math.min(100, Number(req.query?.limit || 50)));
+    const rows = await db.all(
+      `
+      SELECT
+        n.id,
+        n.type,
+        n.created_at AS createdAt,
+        n.read_at AS readAt,
+        n.project_id AS projectId,
+        n.comment_id AS commentId,
+        a.id AS actorId,
+        a.name AS actorName,
+        p.title AS projectTitle
+      FROM notifications n
+      LEFT JOIN users a ON a.id = n.actor_id
+      LEFT JOIN projects p ON p.id = n.project_id
+      WHERE n.user_id = ?
+      ORDER BY n.created_at DESC
+      LIMIT ?
+      `,
+      [req.user.id, limit],
+    );
+    res.json({ ok: true, items: rows });
+  });
+
+  app.post("/api/notifications/read", requireAuth, async (req, res) => {
+    const now = Date.now();
+    await db.run("UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL", [now, req.user.id]);
+    res.json({ ok: true });
+  });
+
   app.get("/api/users/:id", async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return jsonError(res, 400, "BAD_USER_ID");
@@ -545,8 +624,8 @@ async function main() {
     if (!body) return jsonError(res, 400, "BODY_REQUIRED");
     if (body.length > 2000) return jsonError(res, 400, "BODY_TOO_LONG");
 
-    const exists = await db.get("SELECT id FROM projects WHERE id = ?", [id]);
-    if (!exists) return jsonError(res, 404, "NOT_FOUND");
+    const project = await db.get("SELECT id, user_id AS userId FROM projects WHERE id = ?", [id]);
+    if (!project) return jsonError(res, 404, "NOT_FOUND");
 
     await db.run("INSERT INTO comments (project_id, user_id, body, created_at) VALUES (?, ?, ?, ?)", [
       id,
@@ -554,6 +633,15 @@ async function main() {
       body,
       Date.now(),
     ]);
+
+    const inserted = await db.get("SELECT last_insert_rowid() AS id");
+    const commentId = Number(inserted?.id || 0);
+    if (Number(project.userId) !== req.user.id) {
+      await db.run(
+        "INSERT INTO notifications (user_id, type, actor_id, project_id, comment_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        [project.userId, "comment", req.user.id, id, commentId || null, Date.now()],
+      );
+    }
 
     res.json({ ok: true });
   });
@@ -616,6 +704,7 @@ async function main() {
 
     const afterIdRaw = req.query?.afterId;
     const afterId = afterIdRaw == null || afterIdRaw === "" ? null : Number(afterIdRaw);
+    const markRead = String(req.query?.markRead || "") === "1" || String(req.query?.markRead || "") === "true";
 
     const items = await db.all(
       `
@@ -635,6 +724,11 @@ async function main() {
       `,
       [id, Number.isFinite(afterId) ? afterId : null, Number.isFinite(afterId) ? afterId : null],
     );
+
+    if (markRead && items.length) {
+      const maxId = items.reduce((m, x) => Math.max(m, Number(x?.id || 0)), 0);
+      await upsertConversationRead(req.user.id, id, maxId);
+    }
 
     res.json({ ok: true, items });
   });
@@ -662,7 +756,10 @@ async function main() {
       now,
     ]);
 
-    res.json({ ok: true, createdAt: now });
+    const inserted = await db.get("SELECT last_insert_rowid() AS id");
+    const messageId = Number(inserted?.id || 0);
+    await upsertConversationRead(req.user.id, id, messageId);
+    res.json({ ok: true, id: messageId, createdAt: now });
   });
 
   // --- API: FOLLOW ---
@@ -670,6 +767,9 @@ async function main() {
     const targetId = Number(req.params.userId);
     if (!Number.isFinite(targetId)) return jsonError(res, 400, "BAD_USER_ID");
     if (targetId === req.user.id) return jsonError(res, 400, "CANNOT_FOLLOW_SELF");
+
+    const target = await db.get("SELECT id FROM users WHERE id = ?", [targetId]);
+    if (!target) return jsonError(res, 404, "NOT_FOUND");
 
     const existing = await db.get("SELECT 1 AS x FROM follows WHERE follower_id = ? AND followee_id = ?", [
       req.user.id,
@@ -682,6 +782,10 @@ async function main() {
     }
 
     await db.run("INSERT INTO follows (follower_id, followee_id, created_at) VALUES (?, ?, ?)", [req.user.id, targetId, Date.now()]);
+    await db.run(
+      "INSERT INTO notifications (user_id, type, actor_id, created_at) VALUES (?, ?, ?, ?)",
+      [targetId, "follow", req.user.id, Date.now()],
+    );
     res.json({ ok: true, following: true });
   });
 
@@ -690,6 +794,9 @@ async function main() {
     const projectId = Number(req.params.projectId);
     if (!Number.isFinite(projectId)) return jsonError(res, 400, "BAD_PROJECT_ID");
 
+    const project = await db.get("SELECT id, user_id AS userId FROM projects WHERE id = ?", [projectId]);
+    if (!project) return jsonError(res, 404, "NOT_FOUND");
+
     const existing = await db.get("SELECT 1 AS x FROM likes WHERE user_id = ? AND project_id = ?", [req.user.id, projectId]);
     if (existing) {
       await db.run("DELETE FROM likes WHERE user_id = ? AND project_id = ?", [req.user.id, projectId]);
@@ -697,6 +804,12 @@ async function main() {
     }
 
     await db.run("INSERT INTO likes (user_id, project_id, created_at) VALUES (?, ?, ?)", [req.user.id, projectId, Date.now()]);
+    if (Number(project.userId) !== req.user.id) {
+      await db.run(
+        "INSERT INTO notifications (user_id, type, actor_id, project_id, created_at) VALUES (?, ?, ?, ?, ?)",
+        [project.userId, "like", req.user.id, projectId, Date.now()],
+      );
+    }
     res.json({ ok: true, liked: true });
   });
 

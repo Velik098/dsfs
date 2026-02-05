@@ -107,6 +107,7 @@ button {
   padding: 10px 14px;
   border-radius: var(--radius-sm);
   color: var(--muted);
+  position: relative;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
@@ -118,6 +119,24 @@ button {
 .nav-link.is-active {
   color: var(--text);
   background: rgba(255, 255, 255, 0.04);
+}
+
+.nav-badge {
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #e53935;
+  color: #fff;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  display: none;
+}
+
+.nav-badge.is-visible {
+  display: inline-block;
 }
 
 .topbar {
@@ -513,6 +532,31 @@ body.is-modal-open {
   align-items: center;
   gap: 8px;
   justify-content: center;
+}
+
+.btn-badge {
+  position: relative;
+}
+
+.icon-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #e53935;
+  color: #fff;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  display: none;
+}
+
+.icon-badge.is-visible {
+  display: inline-block;
 }
 
 .btn-primary {

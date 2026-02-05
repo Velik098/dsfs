@@ -182,6 +182,198 @@ const wireModal = (modal) => {
   });
 };
 
+const findTopbarButtonByIcon = (iconClass) => {
+  const icon = document.querySelector(`.topbar-actions i.${iconClass}`);
+  return icon ? icon.closest("button") : null;
+};
+
+const ensureIconBadge = (btn) => {
+  if (!btn) return null;
+  btn.classList.add("btn-badge");
+  let badge = btn.querySelector(".icon-badge");
+  if (!badge) {
+    badge = document.createElement("span");
+    badge.className = "icon-badge";
+    badge.setAttribute("aria-hidden", "true");
+    btn.appendChild(badge);
+  }
+  return badge;
+};
+
+const setIconBadge = (badge, count) => {
+  if (!badge) return;
+  const n = Number(count || 0);
+  if (!Number.isFinite(n) || n <= 0) {
+    badge.textContent = "";
+    badge.classList.remove("is-visible");
+    return;
+  }
+  badge.textContent = n > 99 ? "99+" : String(n);
+  badge.classList.add("is-visible");
+};
+
+let badgesTimer = null;
+const startBadgesPolling = () => {
+  if (badgesTimer) return;
+
+  const messageBadges = () => Array.from(document.querySelectorAll("[data-badge='messages']"));
+
+  const tick = async () => {
+    if (!document.body.classList.contains("is-authed")) {
+      messageBadges().forEach((b) => {
+        b.textContent = "";
+        b.classList.remove("is-visible");
+      });
+      return;
+    }
+
+    const res = await apiFetch("/api/badges");
+    if (!res.ok) {
+      messageBadges().forEach((b) => {
+        b.textContent = "";
+        b.classList.remove("is-visible");
+      });
+      return;
+    }
+
+    const n = Number(res.data?.messagesUnread || 0);
+    messageBadges().forEach((b) => {
+      if (!Number.isFinite(n) || n <= 0) {
+        b.textContent = "";
+        b.classList.remove("is-visible");
+      } else {
+        b.textContent = n > 99 ? "99+" : String(n);
+        b.classList.add("is-visible");
+      }
+    });
+  };
+
+  tick();
+  badgesTimer = setInterval(tick, 5000);
+};
+
+const stopBadgesPolling = () => {
+  if (!badgesTimer) return;
+  clearInterval(badgesTimer);
+  badgesTimer = null;
+};
+
+const ensureNotificationsModal = () => {
+  let modal = document.getElementById("notificationsModal");
+  if (modal) return modal;
+
+  modal = document.createElement("div");
+  modal.className = "modal";
+  modal.id = "notificationsModal";
+  modal.setAttribute("aria-hidden", "true");
+
+  modal.innerHTML = `
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="notificationsTitle">
+      <div class="modal-header">
+        <h2 id="notificationsTitle">Уведомления</h2>
+        <button class="btn btn-ghost" type="button" aria-label="Закрыть" data-close-modal><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="muted">Последние события в вашем профиле.</div>
+      <div class="comments-list" id="notificationsList"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" type="button" data-action="notifications-read">Отметить прочитанными</button>
+        <button class="btn btn-primary" type="button" data-close-modal>Закрыть</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+  wireModal(modal);
+
+  modal.querySelector("[data-action='notifications-read']")?.addEventListener("click", async () => {
+    const resp = await apiFetch("/api/notifications/read", { method: "POST" });
+    if (!resp.ok && resp.status === 401) window.location.href = "login.html";
+    await loadNotifications();
+    startBadgesPolling();
+  });
+
+  return modal;
+};
+
+const renderNotificationText = (n) => {
+  const who = n.actorName ? String(n.actorName) : "Кто-то";
+  if (n.type === "like") return `${who} поставил(а) нравится вашему проекту`;
+  if (n.type === "comment") return `${who} оставил(а) комментарий к вашему проекту`;
+  if (n.type === "follow") return `${who} подписался(ась) на вас`;
+  return `${who}: событие`;
+};
+
+const loadNotifications = async () => {
+  const modal = document.getElementById("notificationsModal");
+  if (!modal) return;
+  const list = modal.querySelector("#notificationsList");
+  if (!list) return;
+
+  list.innerHTML = `<div class="muted">Загрузка…</div>`;
+
+  const res = await apiFetch("/api/notifications?limit=50");
+  if (!res.ok) {
+    if (res.status === 401) window.location.href = "login.html";
+    list.innerHTML = `<div class="muted">Не удалось загрузить уведомления.</div>`;
+    return;
+  }
+
+  const items = Array.isArray(res.data?.items) ? res.data.items : [];
+  list.innerHTML = "";
+
+  if (!items.length) {
+    list.innerHTML = `<div class="muted">Пока нет уведомлений.</div>`;
+    return;
+  }
+
+  items.forEach((n) => {
+    const item = document.createElement("div");
+    item.className = "comment-item";
+
+    const head = document.createElement("div");
+    head.className = "comment-head";
+
+    const title = document.createElement("div");
+    title.className = "comment-author";
+    title.textContent = renderNotificationText(n);
+
+    const time = document.createElement("div");
+    time.className = "comment-time";
+    const dt = n.createdAt ? new Date(Number(n.createdAt)) : null;
+    time.textContent = dt ? dt.toLocaleString("ru-RU", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+
+    head.appendChild(title);
+    head.appendChild(time);
+
+    const body = document.createElement("div");
+    const projectTitle = String(n.projectTitle || "").trim();
+    if (projectTitle) {
+      body.textContent = projectTitle;
+    }
+
+    item.appendChild(head);
+    if (body.textContent) item.appendChild(body);
+    list.appendChild(item);
+  });
+};
+
+const initTopbarNotifications = () => {
+  const bellBtn = findTopbarButtonByIcon("fa-bell");
+  if (!bellBtn || bellBtn.dataset.boundNotif === "1") return;
+  bellBtn.dataset.boundNotif = "1";
+
+  bellBtn.addEventListener("click", async () => {
+    if (!document.body.classList.contains("is-authed")) {
+      window.location.href = "login.html";
+      return;
+    }
+    const modal = ensureNotificationsModal();
+    openModal(modal);
+    await loadNotifications();
+  });
+};
+
 const page = document.body?.dataset?.page || "";
 const isAuthPage = page === "login" || page === "register";
 const isPublicPage = page === "feed" || isAuthPage;
@@ -200,6 +392,7 @@ const setAuthedUi = (isAuthed) => {
     if (!me.ok) {
       // Гостевой режим: лента доступна без входа.
       setAuthedUi(false);
+      stopBadgesPolling();
 
       if (!isPublicPage && me.status === 401) {
         const next = encodeURIComponent(window.location.pathname.split("/").pop() || "index.html");
@@ -216,10 +409,13 @@ const setAuthedUi = (isAuthed) => {
       setStoredProfile(profile);
       applyProfileToUi(profile);
       applyStatsToUi(me.data?.stats, user);
+      initTopbarNotifications();
+      startBadgesPolling();
     }
   } catch {
     // Если сервер не запущен или сеть недоступна — просто оставим локальные данные.
     setAuthedUi(false);
+    stopBadgesPolling();
     applyProfileToUi(getStoredProfile());
   }
 })();
@@ -1638,7 +1834,7 @@ if (chatForm && chatMessage && chatThread) {
       await ensureMe();
 
       const result = await apiFetch(
-        `/api/conversations/${convId}/messages?afterId=${encodeURIComponent(String(lastMessageId || 0))}`,
+        `/api/conversations/${convId}/messages?afterId=${encodeURIComponent(String(lastMessageId || 0))}&markRead=1`,
       );
       if (!result.ok) {
         if (result.status === 401) window.location.href = "login.html";
@@ -1682,7 +1878,7 @@ if (chatForm && chatMessage && chatThread) {
     setChatEmpty("Загрузка…");
 
     await ensureMe();
-    const result = await apiFetch(`/api/conversations/${activeConversationId}/messages`);
+    const result = await apiFetch(`/api/conversations/${activeConversationId}/messages?markRead=1`);
     if (!result.ok) {
       if (result.status === 401) window.location.href = "login.html";
       setChatEmpty("Не удалось загрузить сообщения.");
@@ -1737,7 +1933,7 @@ if (chatForm && chatMessage && chatThread) {
     chatMessage.value = "";
 
     const reload = await apiFetch(
-      `/api/conversations/${activeConversationId}/messages?afterId=${encodeURIComponent(String(lastMessageId || 0))}`,
+      `/api/conversations/${activeConversationId}/messages?afterId=${encodeURIComponent(String(lastMessageId || 0))}&markRead=1`,
     );
     if (reload.ok) {
       const items = Array.isArray(reload.data?.items) ? reload.data.items : [];
@@ -1917,6 +2113,7 @@ profileMenus.forEach((menu) => {
         // ignore
       }
       clearStoredProfile();
+      stopBadgesPolling();
       window.location.href = "login.html";
       return;
     }
@@ -1928,6 +2125,7 @@ profileMenus.forEach((menu) => {
         // ignore
       }
       clearStoredProfile();
+      stopBadgesPolling();
       window.location.href = "login.html";
     }
   });
