@@ -720,6 +720,25 @@ body.is-modal-open {
   flex-wrap: wrap;
 }
 
+.post-media {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: #0b0f14;
+}
+
+.post-media:empty {
+  display: none;
+}
+
+.post-media img {
+  width: 100%;
+  height: auto;
+  display: block;
+  max-height: 520px;
+  object-fit: cover;
+}
+
 .post-footer {
   display: flex;
   justify-content: space-between;
@@ -748,6 +767,78 @@ body.is-modal-open {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.composer textarea {
+  width: 100%;
+  min-height: 86px;
+  padding: 12px 12px;
+  background: #0b0f14;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  resize: vertical;
+}
+
+.composer textarea:focus {
+  outline: none;
+  border-color: rgba(29, 155, 240, 0.55);
+}
+
+.composer-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.composer-file {
+  display: none;
+}
+
+.composer-preview {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.composer-preview-box {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: #0b0f14;
+  max-width: 520px;
+}
+
+.composer-preview-box img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 420px;
+  object-fit: cover;
+}
+
+.composer-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  display: grid;
+  place-items: center;
+}
+
+.composer-remove:hover {
+  background: rgba(0, 0, 0, 0.7);
 }
 
 .rightbar-card {

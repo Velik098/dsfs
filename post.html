@@ -70,7 +70,7 @@
             </label>
             <label>
               Категория
-              <select>
+              <select name="category">
                 <option>Брендинг</option>
                 <option>Интерфейсы</option>
                 <option>Веб</option>
@@ -110,6 +110,14 @@
         </div>
         <div class="feed-list" id="myProjectsList"></div>
       </section>
+
+      <section class="feed">
+        <div class="feed-header">
+          <h2>Рекомендации</h2>
+          <div class="muted">Все проекты пользователей</div>
+        </div>
+        <div class="feed-list" id="recommendedProjectsList"></div>
+      </section>
     </main>
   </div>
 
@@ -147,6 +155,16 @@
           <textarea name="body" rows="5" required></textarea>
         </label>
         <div class="form-grid compact">
+          <label>
+            Категория
+            <select name="category">
+              <option>Брендинг</option>
+              <option>Интерфейсы</option>
+              <option>Веб</option>
+              <option>Анимация</option>
+              <option>Продукт</option>
+            </select>
+          </label>
           <label>
             Срок
             <input type="date" name="dueDate" />

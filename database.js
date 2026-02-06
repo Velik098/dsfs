@@ -196,6 +196,7 @@ function ensureSchema() {
       budget_min INTEGER,
       budget_max INTEGER,
       due_date TEXT,
+      category TEXT,
       tags TEXT NOT NULL DEFAULT '',
       created_at INTEGER NOT NULL,
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -259,18 +260,57 @@ function ensureSchema() {
       FOREIGN KEY(sender_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      body TEXT NOT NULL,
+      image_data TEXT,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS post_likes (
+      user_id INTEGER NOT NULL,
+      post_id INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, post_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS post_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      post_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      body TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS reposts (
+      user_id INTEGER NOT NULL,
+      target_type TEXT NOT NULL,
+      target_id INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, target_type, target_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS notifications (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
       type TEXT NOT NULL,
       actor_id INTEGER,
       project_id INTEGER,
+      post_id INTEGER,
       comment_id INTEGER,
       created_at INTEGER NOT NULL,
       read_at INTEGER,
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY(actor_id) REFERENCES users(id) ON DELETE SET NULL,
       FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE,
       FOREIGN KEY(comment_id) REFERENCES comments(id) ON DELETE CASCADE
     );
   `);
@@ -290,11 +330,20 @@ function ensureSchema() {
 
   const projectCols = getTableColumns("projects");
   if (!projectCols.has("due_date")) safeExec("ALTER TABLE projects ADD COLUMN due_date TEXT;");
+  if (!projectCols.has("category")) safeExec("ALTER TABLE projects ADD COLUMN category TEXT;");
+
+  const notifCols = getTableColumns("notifications");
+  if (!notifCols.has("post_id")) safeExec("ALTER TABLE notifications ADD COLUMN post_id INTEGER;");
 
   const msgCols = getTableColumns("messages");
   if (msgCols.has("conversation_id") && msgCols.has("created_at")) {
     safeExec("CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at);");
   }
+
+  safeExec("CREATE INDEX IF NOT EXISTS idx_posts_user_created ON posts(user_id, created_at);");
+  safeExec("CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at);");
+  safeExec("CREATE INDEX IF NOT EXISTS idx_post_comments_post_created ON post_comments(post_id, created_at);");
+  safeExec("CREATE INDEX IF NOT EXISTS idx_reposts_user_created ON reposts(user_id, created_at);");
 
   safeExec("CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(user_id, created_at);");
   safeExec("CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read_at);");

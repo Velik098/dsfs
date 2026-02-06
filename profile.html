@@ -85,6 +85,27 @@
         </div>
       </section>
 
+      <section class="create-form">
+        <div class="feed-header">
+          <h2>Новая запись</h2>
+          <div class="muted" id="postComposerHint"></div>
+        </div>
+
+        <form id="postForm" data-post-composer="1">
+          <div class="composer">
+            <textarea name="body" rows="3" placeholder="Что у вас нового?"></textarea>
+            <div class="composer-preview" id="postImagePreview"></div>
+            <div class="composer-actions">
+              <input class="composer-file" type="file" name="image" accept="image/*" />
+              <button class="btn btn-ghost" type="button" data-action="attach">
+                <i class="fa-solid fa-paperclip"></i> Прикрепить
+              </button>
+              <button class="btn btn-primary" type="submit">Опубликовать</button>
+            </div>
+          </div>
+        </form>
+      </section>
+
       <section class="portfolio">
         <div class="feed-header">
           <h2>Мои проекты</h2>
@@ -92,6 +113,21 @@
         </div>
 
         <div class="feed-list" id="profileProjectsList"></div>
+      </section>
+
+      <section class="portfolio">
+        <div class="feed-header">
+          <h2>Мои посты</h2>
+        </div>
+        <div class="feed-list" id="profilePostsList"></div>
+      </section>
+
+      <section class="portfolio">
+        <div class="feed-header">
+          <h2>Репосты</h2>
+          <div class="muted">Публикации и проекты, которые вы добавили к себе.</div>
+        </div>
+        <div class="feed-list" id="profileRepostsList"></div>
       </section>
     </main>
   </div>

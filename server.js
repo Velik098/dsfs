@@ -26,6 +26,22 @@ function cookieOptions(maxAgeMs) {
   return opts;
 }
 
+function normalizeProjectCategory(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  // Держим категории фиксированными, чтобы фильтры работали предсказуемо.
+  const key = raw.toLowerCase();
+  if (key === "дизайн") return "Дизайн";
+  if (key === "интерфейсы") return "Дизайн";
+  if (key === "анимация") return "Дизайн";
+  if (key === "веб") return "Веб";
+  if (key === "бренд") return "Бренд";
+  if (key === "брендинг") return "Бренд";
+  if (key === "продукт") return "Продукт";
+  return null;
+}
+
 async function loadUserFromSession(req) {
   const token = req.cookies?.[SESSION_COOKIE];
   if (!token) return null;
@@ -162,7 +178,8 @@ async function main() {
 
   const app = express();
 
-  app.use(express.json({ limit: "200kb" }));
+  // Для постов с картинками (data URL) нужен больший лимит.
+  app.use(express.json({ limit: "3mb" }));
   app.use(cookieParser());
 
   // Авторизация на каждом запросе (недорого для MVP).
@@ -399,13 +416,16 @@ async function main() {
         n.created_at AS createdAt,
         n.read_at AS readAt,
         n.project_id AS projectId,
+        n.post_id AS postId,
         n.comment_id AS commentId,
         a.id AS actorId,
         a.name AS actorName,
-        p.title AS projectTitle
+        p.title AS projectTitle,
+        s.body AS postBody
       FROM notifications n
       LEFT JOIN users a ON a.id = n.actor_id
       LEFT JOIN projects p ON p.id = n.project_id
+      LEFT JOIN posts s ON s.id = n.post_id
       WHERE n.user_id = ?
       ORDER BY n.created_at DESC
       LIMIT ?
@@ -444,6 +464,7 @@ async function main() {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return jsonError(res, 400, "BAD_USER_ID");
 
+    const meId = req.user?.id ?? null;
     const rows = await db.all(
       `
       SELECT
@@ -453,16 +474,19 @@ async function main() {
         p.budget_min AS budgetMin,
         p.budget_max AS budgetMax,
         p.due_date AS dueDate,
+        p.category AS category,
         p.tags,
         p.created_at AS createdAt,
         (SELECT COUNT(*) FROM likes l WHERE l.project_id = p.id) AS likesCount,
-        (SELECT COUNT(*) FROM comments c WHERE c.project_id = p.id) AS commentsCount
+        (SELECT COUNT(*) FROM comments c WHERE c.project_id = p.id) AS commentsCount,
+        EXISTS(SELECT 1 FROM likes l2 WHERE l2.project_id = p.id AND l2.user_id = ?) AS likedByMe,
+        EXISTS(SELECT 1 FROM reposts r WHERE r.target_type = 'project' AND r.target_id = p.id AND r.user_id = ?) AS repostedByMe
       FROM projects p
       WHERE p.user_id = ?
       ORDER BY p.created_at DESC
       LIMIT 50
       `,
-      [id],
+      [meId, meId, id],
     );
 
     res.json({ ok: true, items: rows });
@@ -470,7 +494,10 @@ async function main() {
 
   // --- API: PROJECTS ---
   app.get("/api/projects", async (req, res) => {
-    // Лента доступна всем, но с авторизацией можно будет показывать "лайкнул/подписан".
+    // Лента доступна всем, но с авторизацией показываем likedByMe.
+    const meId = req.user?.id ?? null;
+    const category = normalizeProjectCategory(req.query?.category);
+
     const rows = await db.all(
       `
       SELECT
@@ -480,18 +507,23 @@ async function main() {
         p.budget_min AS budgetMin,
         p.budget_max AS budgetMax,
         p.due_date AS dueDate,
+        p.category AS category,
         p.tags,
         p.created_at AS createdAt,
         u.id AS authorId,
         u.name AS authorName,
         u.role AS authorRole,
         (SELECT COUNT(*) FROM likes l WHERE l.project_id = p.id) AS likesCount,
-        (SELECT COUNT(*) FROM comments c WHERE c.project_id = p.id) AS commentsCount
+        (SELECT COUNT(*) FROM comments c WHERE c.project_id = p.id) AS commentsCount,
+        EXISTS(SELECT 1 FROM likes l2 WHERE l2.project_id = p.id AND l2.user_id = ?) AS likedByMe,
+        EXISTS(SELECT 1 FROM reposts r WHERE r.target_type = 'project' AND r.target_id = p.id AND r.user_id = ?) AS repostedByMe
       FROM projects p
       JOIN users u ON u.id = p.user_id
+      WHERE (? IS NULL OR p.category = ?)
       ORDER BY p.created_at DESC
       LIMIT 50
       `,
+      [meId, meId, category, category],
     );
     res.json({ ok: true, items: rows });
   });
@@ -506,16 +538,19 @@ async function main() {
         p.budget_min AS budgetMin,
         p.budget_max AS budgetMax,
         p.due_date AS dueDate,
+        p.category AS category,
         p.tags,
         p.created_at AS createdAt,
         (SELECT COUNT(*) FROM likes l WHERE l.project_id = p.id) AS likesCount,
-        (SELECT COUNT(*) FROM comments c WHERE c.project_id = p.id) AS commentsCount
+        (SELECT COUNT(*) FROM comments c WHERE c.project_id = p.id) AS commentsCount,
+        EXISTS(SELECT 1 FROM likes l2 WHERE l2.project_id = p.id AND l2.user_id = ?) AS likedByMe,
+        EXISTS(SELECT 1 FROM reposts r WHERE r.target_type = 'project' AND r.target_id = p.id AND r.user_id = ?) AS repostedByMe
       FROM projects p
       WHERE p.user_id = ?
       ORDER BY p.created_at DESC
       LIMIT 100
       `,
-      [req.user.id],
+      [req.user.id, req.user.id, req.user.id],
     );
     res.json({ ok: true, items: rows });
   });
@@ -523,6 +558,7 @@ async function main() {
   app.post("/api/projects", requireAuth, async (req, res) => {
     const title = String(req.body?.title || "").trim();
     const body = String(req.body?.body || "").trim();
+    const category = normalizeProjectCategory(req.body?.category);
     const tags = String(req.body?.tags || "").trim();
     const budgetMin = req.body?.budgetMin == null ? null : Number(req.body.budgetMin);
     const budgetMax = req.body?.budgetMax == null ? null : Number(req.body.budgetMax);
@@ -533,7 +569,7 @@ async function main() {
 
     const now = Date.now();
     await db.run(
-      "INSERT INTO projects (user_id, title, body, budget_min, budget_max, due_date, tags, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO projects (user_id, title, body, budget_min, budget_max, due_date, category, tags, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
         req.user.id,
         title,
@@ -541,6 +577,7 @@ async function main() {
         Number.isFinite(budgetMin) ? budgetMin : null,
         Number.isFinite(budgetMax) ? budgetMax : null,
         dueDate || null,
+        category,
         tags,
         now,
       ],
@@ -552,12 +589,15 @@ async function main() {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return jsonError(res, 400, "BAD_PROJECT_ID");
 
-    const existing = await db.get("SELECT id, user_id AS userId FROM projects WHERE id = ?", [id]);
+    const existing = await db.get("SELECT id, user_id AS userId, category FROM projects WHERE id = ?", [id]);
     if (!existing) return jsonError(res, 404, "NOT_FOUND");
     if (Number(existing.userId) !== req.user.id) return jsonError(res, 403, "FORBIDDEN");
 
     const title = String(req.body?.title || "").trim();
     const body = String(req.body?.body || "").trim();
+    const categoryRaw = req.body?.category;
+    const category = categoryRaw === undefined ? undefined : normalizeProjectCategory(categoryRaw);
+    const nextCategory = category === undefined ? (existing.category == null ? null : String(existing.category)) : category;
     const tags = String(req.body?.tags || "").trim();
     const budgetMin = req.body?.budgetMin == null ? null : Number(req.body.budgetMin);
     const budgetMax = req.body?.budgetMax == null ? null : Number(req.body.budgetMax);
@@ -566,12 +606,13 @@ async function main() {
     if (!title) return jsonError(res, 400, "TITLE_REQUIRED");
     if (!body) return jsonError(res, 400, "BODY_REQUIRED");
 
-    await db.run("UPDATE projects SET title = ?, body = ?, budget_min = ?, budget_max = ?, due_date = ?, tags = ? WHERE id = ?", [
+    await db.run("UPDATE projects SET title = ?, body = ?, budget_min = ?, budget_max = ?, due_date = ?, category = ?, tags = ? WHERE id = ?", [
       title,
       body,
       Number.isFinite(budgetMin) ? budgetMin : null,
       Number.isFinite(budgetMax) ? budgetMax : null,
       dueDate || null,
+      nextCategory,
       tags,
       id,
     ]);
@@ -644,6 +685,308 @@ async function main() {
     }
 
     res.json({ ok: true });
+  });
+
+  // --- API: POSTS (текст + картинка) ---
+  app.get("/api/posts", async (req, res) => {
+    const meId = req.user?.id ?? null;
+    const limit = Math.max(1, Math.min(100, Number(req.query?.limit || 50)));
+
+    const rows = await db.all(
+      `
+      SELECT
+        s.id,
+        s.body,
+        s.image_data AS imageData,
+        s.created_at AS createdAt,
+        u.id AS authorId,
+        u.name AS authorName,
+        u.role AS authorRole,
+        (SELECT COUNT(*) FROM post_likes l WHERE l.post_id = s.id) AS likesCount,
+        (SELECT COUNT(*) FROM post_comments c WHERE c.post_id = s.id) AS commentsCount,
+        EXISTS(SELECT 1 FROM post_likes l2 WHERE l2.post_id = s.id AND l2.user_id = ?) AS likedByMe,
+        EXISTS(SELECT 1 FROM reposts r WHERE r.target_type = 'post' AND r.target_id = s.id AND r.user_id = ?) AS repostedByMe
+      FROM posts s
+      JOIN users u ON u.id = s.user_id
+      ORDER BY s.created_at DESC
+      LIMIT ?
+      `,
+      [meId, meId, limit],
+    );
+
+    res.json({ ok: true, items: rows });
+  });
+
+  app.get("/api/my/posts", requireAuth, async (req, res) => {
+    const rows = await db.all(
+      `
+      SELECT
+        s.id,
+        s.body,
+        s.image_data AS imageData,
+        s.created_at AS createdAt,
+        (SELECT COUNT(*) FROM post_likes l WHERE l.post_id = s.id) AS likesCount,
+        (SELECT COUNT(*) FROM post_comments c WHERE c.post_id = s.id) AS commentsCount,
+        EXISTS(SELECT 1 FROM post_likes l2 WHERE l2.post_id = s.id AND l2.user_id = ?) AS likedByMe,
+        EXISTS(SELECT 1 FROM reposts r WHERE r.target_type = 'post' AND r.target_id = s.id AND r.user_id = ?) AS repostedByMe
+      FROM posts s
+      WHERE s.user_id = ?
+      ORDER BY s.created_at DESC
+      LIMIT 100
+      `,
+      [req.user.id, req.user.id, req.user.id],
+    );
+    res.json({ ok: true, items: rows });
+  });
+
+  app.post("/api/posts", requireAuth, async (req, res) => {
+    const body = String(req.body?.body || "").trim();
+    const imageData = req.body?.imageData == null ? null : String(req.body.imageData || "").trim();
+
+    if (!body && !imageData) return jsonError(res, 400, "BODY_OR_IMAGE_REQUIRED");
+    if (body.length > 4000) return jsonError(res, 400, "BODY_TOO_LONG");
+
+    let storedImage = null;
+    if (imageData) {
+      // Храним картинку прямо в SQLite (data URL) — для MVP. Ограничиваем размер.
+      if (!/^data:image\/(png|jpe?g|webp);base64,/i.test(imageData)) return jsonError(res, 400, "BAD_IMAGE");
+      if (imageData.length > 1_700_000) return jsonError(res, 400, "IMAGE_TOO_LARGE");
+      storedImage = imageData;
+    }
+
+    const now = Date.now();
+    await db.run("INSERT INTO posts (user_id, body, image_data, created_at) VALUES (?, ?, ?, ?)", [
+      req.user.id,
+      body,
+      storedImage,
+      now,
+    ]);
+
+    res.json({ ok: true });
+  });
+
+  app.put("/api/posts/:id", requireAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return jsonError(res, 400, "BAD_POST_ID");
+
+    const existing = await db.get("SELECT id, user_id AS userId, image_data AS imageData FROM posts WHERE id = ?", [id]);
+    if (!existing) return jsonError(res, 404, "NOT_FOUND");
+    if (Number(existing.userId) !== req.user.id) return jsonError(res, 403, "FORBIDDEN");
+
+    const body = String(req.body?.body || "").trim();
+    const imageDataRaw = req.body?.imageData;
+    const imageData = imageDataRaw === undefined ? undefined : String(imageDataRaw || "").trim();
+
+    if (!body && imageData !== undefined && !imageData) return jsonError(res, 400, "BODY_OR_IMAGE_REQUIRED");
+    if (body.length > 4000) return jsonError(res, 400, "BODY_TOO_LONG");
+
+    let nextImage = existing.imageData == null ? null : String(existing.imageData);
+    if (imageData !== undefined) {
+      if (!imageData) nextImage = null;
+      else {
+        if (!/^data:image\/(png|jpe?g|webp);base64,/i.test(imageData)) return jsonError(res, 400, "BAD_IMAGE");
+        if (imageData.length > 1_700_000) return jsonError(res, 400, "IMAGE_TOO_LARGE");
+        nextImage = imageData;
+      }
+    }
+
+    await db.run("UPDATE posts SET body = ?, image_data = ? WHERE id = ?", [body, nextImage, id]);
+    res.json({ ok: true });
+  });
+
+  app.delete("/api/posts/:id", requireAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return jsonError(res, 400, "BAD_POST_ID");
+
+    const existing = await db.get("SELECT id, user_id AS userId FROM posts WHERE id = ?", [id]);
+    if (!existing) return jsonError(res, 404, "NOT_FOUND");
+    if (Number(existing.userId) !== req.user.id) return jsonError(res, 403, "FORBIDDEN");
+
+    await db.run("DELETE FROM posts WHERE id = ?", [id]);
+    res.json({ ok: true });
+  });
+
+  app.post("/api/post-like/:postId", requireAuth, async (req, res) => {
+    const postId = Number(req.params.postId);
+    if (!Number.isFinite(postId)) return jsonError(res, 400, "BAD_POST_ID");
+
+    const post = await db.get("SELECT id, user_id AS userId FROM posts WHERE id = ?", [postId]);
+    if (!post) return jsonError(res, 404, "NOT_FOUND");
+
+    const existing = await db.get("SELECT 1 AS x FROM post_likes WHERE user_id = ? AND post_id = ?", [req.user.id, postId]);
+    if (existing) {
+      await db.run("DELETE FROM post_likes WHERE user_id = ? AND post_id = ?", [req.user.id, postId]);
+      const count = await db.get("SELECT COUNT(*) AS c FROM post_likes WHERE post_id = ?", [postId]);
+      return res.json({ ok: true, liked: false, likesCount: Number(count?.c || 0) });
+    }
+
+    await db.run("INSERT INTO post_likes (user_id, post_id, created_at) VALUES (?, ?, ?)", [req.user.id, postId, Date.now()]);
+    if (Number(post.userId) !== req.user.id) {
+      await db.run(
+        "INSERT INTO notifications (user_id, type, actor_id, post_id, created_at) VALUES (?, ?, ?, ?, ?)",
+        [post.userId, "like", req.user.id, postId, Date.now()],
+      );
+    }
+    const count = await db.get("SELECT COUNT(*) AS c FROM post_likes WHERE post_id = ?", [postId]);
+    res.json({ ok: true, liked: true, likesCount: Number(count?.c || 0) });
+  });
+
+  app.get("/api/posts/:id/comments", async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return jsonError(res, 400, "BAD_POST_ID");
+
+    const rows = await db.all(
+      `
+      SELECT
+        c.id,
+        c.body,
+        c.created_at AS createdAt,
+        u.id AS authorId,
+        u.name AS authorName
+      FROM post_comments c
+      JOIN users u ON u.id = c.user_id
+      WHERE c.post_id = ?
+      ORDER BY c.created_at ASC
+      LIMIT 200
+      `,
+      [id],
+    );
+    res.json({ ok: true, items: rows });
+  });
+
+  app.post("/api/posts/:id/comments", requireAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return jsonError(res, 400, "BAD_POST_ID");
+
+    const body = String(req.body?.body || "").trim();
+    if (!body) return jsonError(res, 400, "BODY_REQUIRED");
+    if (body.length > 2000) return jsonError(res, 400, "BODY_TOO_LONG");
+
+    const post = await db.get("SELECT id, user_id AS userId FROM posts WHERE id = ?", [id]);
+    if (!post) return jsonError(res, 404, "NOT_FOUND");
+
+    await db.run("INSERT INTO post_comments (post_id, user_id, body, created_at) VALUES (?, ?, ?, ?)", [
+      id,
+      req.user.id,
+      body,
+      Date.now(),
+    ]);
+
+    if (Number(post.userId) !== req.user.id) {
+      await db.run(
+        "INSERT INTO notifications (user_id, type, actor_id, post_id, created_at) VALUES (?, ?, ?, ?, ?)",
+        [post.userId, "comment", req.user.id, id, Date.now()],
+      );
+    }
+
+    res.json({ ok: true });
+  });
+
+  // --- API: REPOST (проекты/посты) ---
+  app.post("/api/repost", requireAuth, async (req, res) => {
+    const type = String(req.body?.type || "").trim().toLowerCase();
+    const id = Number(req.body?.id);
+    if (!Number.isFinite(id)) return jsonError(res, 400, "BAD_TARGET_ID");
+    if (type !== "project" && type !== "post") return jsonError(res, 400, "BAD_TARGET_TYPE");
+
+    if (type === "project") {
+      const p = await db.get("SELECT id FROM projects WHERE id = ?", [id]);
+      if (!p) return jsonError(res, 404, "NOT_FOUND");
+    } else {
+      const s = await db.get("SELECT id FROM posts WHERE id = ?", [id]);
+      if (!s) return jsonError(res, 404, "NOT_FOUND");
+    }
+
+    const existing = await db.get("SELECT 1 AS x FROM reposts WHERE user_id = ? AND target_type = ? AND target_id = ?", [
+      req.user.id,
+      type,
+      id,
+    ]);
+
+    if (existing) {
+      await db.run("DELETE FROM reposts WHERE user_id = ? AND target_type = ? AND target_id = ?", [req.user.id, type, id]);
+      return res.json({ ok: true, reposted: false });
+    }
+
+    await db.run("INSERT INTO reposts (user_id, target_type, target_id, created_at) VALUES (?, ?, ?, ?)", [
+      req.user.id,
+      type,
+      id,
+      Date.now(),
+    ]);
+
+    res.json({ ok: true, reposted: true });
+  });
+
+  app.get("/api/my/reposts", requireAuth, async (req, res) => {
+    const meId = req.user.id;
+
+    const projectRows = await db.all(
+      `
+      SELECT
+        r.target_type AS targetType,
+        r.target_id AS targetId,
+        r.created_at AS repostedAt,
+        p.id,
+        p.title,
+        p.body,
+        p.budget_min AS budgetMin,
+        p.budget_max AS budgetMax,
+        p.due_date AS dueDate,
+        p.category AS category,
+        p.tags,
+        p.created_at AS createdAt,
+        u.id AS authorId,
+        u.name AS authorName,
+        u.role AS authorRole,
+        (SELECT COUNT(*) FROM likes l WHERE l.project_id = p.id) AS likesCount,
+        (SELECT COUNT(*) FROM comments c WHERE c.project_id = p.id) AS commentsCount,
+        EXISTS(SELECT 1 FROM likes l2 WHERE l2.project_id = p.id AND l2.user_id = ?) AS likedByMe,
+        1 AS repostedByMe
+      FROM reposts r
+      JOIN projects p ON p.id = r.target_id
+      JOIN users u ON u.id = p.user_id
+      WHERE r.user_id = ? AND r.target_type = 'project'
+      ORDER BY r.created_at DESC
+      LIMIT 100
+      `,
+      [meId, meId],
+    );
+
+    const postRows = await db.all(
+      `
+      SELECT
+        r.target_type AS targetType,
+        r.target_id AS targetId,
+        r.created_at AS repostedAt,
+        s.id,
+        s.body,
+        s.image_data AS imageData,
+        s.created_at AS createdAt,
+        u.id AS authorId,
+        u.name AS authorName,
+        u.role AS authorRole,
+        (SELECT COUNT(*) FROM post_likes l WHERE l.post_id = s.id) AS likesCount,
+        (SELECT COUNT(*) FROM post_comments c WHERE c.post_id = s.id) AS commentsCount,
+        EXISTS(SELECT 1 FROM post_likes l2 WHERE l2.post_id = s.id AND l2.user_id = ?) AS likedByMe,
+        1 AS repostedByMe
+      FROM reposts r
+      JOIN posts s ON s.id = r.target_id
+      JOIN users u ON u.id = s.user_id
+      WHERE r.user_id = ? AND r.target_type = 'post'
+      ORDER BY r.created_at DESC
+      LIMIT 100
+      `,
+      [meId, meId],
+    );
+
+    const items = []
+      .concat(projectRows.map((x) => ({ kind: "project", ...x })))
+      .concat(postRows.map((x) => ({ kind: "post", ...x })))
+      .sort((a, b) => Number(b.repostedAt || 0) - Number(a.repostedAt || 0))
+      .slice(0, 100);
+
+    res.json({ ok: true, items });
   });
 
   // --- API: MESSENGER (1-на-1) ---
@@ -800,7 +1143,8 @@ async function main() {
     const existing = await db.get("SELECT 1 AS x FROM likes WHERE user_id = ? AND project_id = ?", [req.user.id, projectId]);
     if (existing) {
       await db.run("DELETE FROM likes WHERE user_id = ? AND project_id = ?", [req.user.id, projectId]);
-      return res.json({ ok: true, liked: false });
+      const count = await db.get("SELECT COUNT(*) AS c FROM likes WHERE project_id = ?", [projectId]);
+      return res.json({ ok: true, liked: false, likesCount: Number(count?.c || 0) });
     }
 
     await db.run("INSERT INTO likes (user_id, project_id, created_at) VALUES (?, ?, ?)", [req.user.id, projectId, Date.now()]);
@@ -810,7 +1154,8 @@ async function main() {
         [project.userId, "like", req.user.id, projectId, Date.now()],
       );
     }
-    res.json({ ok: true, liked: true });
+    const count = await db.get("SELECT COUNT(*) AS c FROM likes WHERE project_id = ?", [projectId]);
+    res.json({ ok: true, liked: true, likesCount: Number(count?.c || 0) });
   });
 
   // --- Static ---

@@ -298,8 +298,9 @@ const ensureNotificationsModal = () => {
 
 const renderNotificationText = (n) => {
   const who = n.actorName ? String(n.actorName) : "Кто-то";
-  if (n.type === "like") return `${who} поставил(а) нравится вашему проекту`;
-  if (n.type === "comment") return `${who} оставил(а) комментарий к вашему проекту`;
+  const isPost = n.postId != null && n.postId !== "";
+  if (n.type === "like") return `${who} поставил(а) нравится вашему ${isPost ? "посту" : "проекту"}`;
+  if (n.type === "comment") return `${who} оставил(а) комментарий к вашему ${isPost ? "посту" : "проекту"}`;
   if (n.type === "follow") return `${who} подписался(ась) на вас`;
   return `${who}: событие`;
 };
@@ -348,9 +349,9 @@ const loadNotifications = async () => {
 
     const body = document.createElement("div");
     const projectTitle = String(n.projectTitle || "").trim();
-    if (projectTitle) {
-      body.textContent = projectTitle;
-    }
+    const postBody = String(n.postBody || "").trim();
+    if (projectTitle) body.textContent = projectTitle;
+    else if (postBody) body.textContent = postBody.length > 140 ? `${postBody.slice(0, 140)}…` : postBody;
 
     item.appendChild(head);
     if (body.textContent) item.appendChild(body);
@@ -444,148 +445,195 @@ document.querySelectorAll("[data-auth-required]").forEach((link) => {
   });
 });
 
-// 1.05) Лента проектов — тянем из общей БД
+// 1.05) Лента проектов — тянем из общей БД (+ фильтры категорий)
 const feedList = document.getElementById("feedList");
 if (feedList) {
-  (async () => {
+  const filtersWrap = document.querySelector(".feed .filters");
+  const filterButtons = filtersWrap ? Array.from(filtersWrap.querySelectorAll("button.chip")) : [];
+  let activeCategory = "";
+
+  const getCategoryFromFilterButton = (btn) => {
+    const t = String(btn?.textContent || "").trim().toLowerCase();
+    if (!t) return "";
+    if (t === "все") return "";
+    if (t === "дизайн") return "Дизайн";
+    if (t === "веб") return "Веб";
+    if (t === "бренд") return "Бренд";
+    if (t === "продукт") return "Продукт";
+    return "";
+  };
+
+  const setActiveFilterUi = (category) => {
+    filterButtons.forEach((btn) => {
+      const c = getCategoryFromFilterButton(btn);
+      btn.classList.toggle("is-active", c === category);
+    });
+  };
+
+  const renderFeed = (items) => {
+    feedList.innerHTML = "";
+
+    if (!items.length) {
+      const empty = document.createElement("div");
+      empty.className = "muted";
+      empty.textContent = activeCategory
+        ? `Пока нет проектов в категории «${activeCategory}».`
+        : "Пока пусто. Создайте первый проект — он появится здесь.";
+      feedList.appendChild(empty);
+      return;
+    }
+
+    items.forEach((p) => {
+      const card = document.createElement("article");
+      card.className = "post-card";
+
+      const header = document.createElement("div");
+      header.className = "post-header";
+
+      const left = document.createElement("div");
+
+      const av = document.createElement("div");
+      av.className = "avatar";
+      av.textContent = getInitials(p.authorName) || "Я";
+
+      const metaWrap = document.createElement("div");
+      const author = document.createElement("a");
+      author.className = "post-author";
+      author.textContent = p.authorName || "Пользователь";
+      if (p.authorId != null) author.href = `user.html?id=${encodeURIComponent(String(p.authorId))}`;
+
+      const meta = document.createElement("div");
+      meta.className = "post-meta";
+      const dt = p.createdAt ? new Date(Number(p.createdAt)) : null;
+      meta.textContent = dt ? dt.toLocaleString("ru-RU", { day: "2-digit", month: "short" }) : "";
+
+      metaWrap.appendChild(author);
+      metaWrap.appendChild(meta);
+
+      left.appendChild(av);
+      left.appendChild(metaWrap);
+
+      const menuBtn = document.createElement("button");
+      menuBtn.className = "btn btn-ghost";
+      menuBtn.type = "button";
+      menuBtn.setAttribute("aria-label", "Меню");
+      menuBtn.innerHTML = '<i class="fa-solid fa-ellipsis"></i>';
+
+      header.appendChild(left);
+      header.appendChild(menuBtn);
+
+      const h3 = document.createElement("h3");
+      h3.textContent = p.title || "";
+
+      const body = document.createElement("p");
+      body.textContent = p.body || "";
+
+      const tags = document.createElement("div");
+      tags.className = "post-tags";
+
+      const category = String(p.category || "").trim();
+      if (category) {
+        const tag = document.createElement("span");
+        tag.className = "chip";
+        tag.textContent = category;
+        tags.appendChild(tag);
+      }
+
+      const tagsStr = String(p.tags || "").trim();
+      if (tagsStr) {
+        tagsStr
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .slice(0, 6)
+          .forEach((t) => {
+            const tag = document.createElement("span");
+            tag.className = "chip";
+            tag.textContent = t;
+            tags.appendChild(tag);
+          });
+      }
+
+      const footer = document.createElement("div");
+      footer.className = "post-footer";
+
+      const budgetWrap = document.createElement("div");
+      budgetWrap.className = "budget-wrap";
+
+      const budget = document.createElement("div");
+      budget.className = "budget";
+      budget.textContent = formatBudget(p.budgetMin, p.budgetMax);
+      budgetWrap.appendChild(budget);
+
+      const due = formatDueDate(p.dueDate);
+      if (due) {
+        const dueEl = document.createElement("div");
+        dueEl.className = "budget-meta";
+        dueEl.textContent = `Срок: ${due}`;
+        budgetWrap.appendChild(dueEl);
+      }
+
+      const actions = document.createElement("div");
+      actions.className = "post-actions";
+
+      const likeBtn = document.createElement("button");
+      likeBtn.className = "btn btn-ghost";
+      likeBtn.type = "button";
+      likeBtn.setAttribute("data-toggle", "like");
+      likeBtn.setAttribute("data-project-id", String(p.id));
+      setLikeButtonUi(likeBtn, Boolean(p.likedByMe), Number(p.likesCount || 0));
+
+      const commentBtn = document.createElement("button");
+      commentBtn.className = "btn btn-ghost";
+      commentBtn.type = "button";
+      commentBtn.setAttribute("data-toggle", "comments");
+      commentBtn.setAttribute("data-project-id", String(p.id));
+      setCommentsButtonUi(commentBtn, Number(p.commentsCount || 0));
+
+      const repostBtn = document.createElement("button");
+      repostBtn.className = "btn btn-ghost";
+      repostBtn.type = "button";
+      repostBtn.setAttribute("data-repost-type", "project");
+      repostBtn.setAttribute("data-repost-id", String(p.id));
+      setRepostButtonUi(repostBtn, Boolean(p.repostedByMe));
+
+      const replyBtn = document.createElement("button");
+      replyBtn.className = "btn btn-primary";
+      replyBtn.type = "button";
+      replyBtn.textContent = "Откликнуться";
+
+      actions.appendChild(likeBtn);
+      actions.appendChild(commentBtn);
+      actions.appendChild(repostBtn);
+      actions.appendChild(replyBtn);
+
+      footer.appendChild(budgetWrap);
+      footer.appendChild(actions);
+
+      card.appendChild(header);
+      card.appendChild(h3);
+      card.appendChild(body);
+      if (tags.childElementCount) card.appendChild(tags);
+      card.appendChild(footer);
+
+      feedList.appendChild(card);
+
+      bindLikeButton(likeBtn);
+      bindCommentsButton(commentBtn, { projectId: p.id, title: p.title });
+      bindRepostButton(repostBtn);
+    });
+  };
+
+  const loadFeed = async () => {
     try {
-      const result = await apiFetch("/api/projects");
+      feedList.innerHTML = `<div class="muted">Загрузка…</div>`;
+
+      const url = activeCategory ? `/api/projects?category=${encodeURIComponent(activeCategory)}` : "/api/projects";
+      const result = await apiFetch(url);
       if (!result.ok) throw new Error("API_UNAVAILABLE");
 
       const items = Array.isArray(result.data?.items) ? result.data.items : [];
-      feedList.innerHTML = "";
-
-      if (!items.length) {
-        const empty = document.createElement("div");
-        empty.className = "muted";
-        empty.textContent = "Пока пусто. Создайте первый проект — он появится здесь.";
-        feedList.appendChild(empty);
-        return;
-      }
-
-      items.forEach((p) => {
-        const card = document.createElement("article");
-        card.className = "post-card";
-
-        const header = document.createElement("div");
-        header.className = "post-header";
-
-        const left = document.createElement("div");
-
-        const av = document.createElement("div");
-        av.className = "avatar";
-        av.textContent = getInitials(p.authorName) || "Я";
-
-        const metaWrap = document.createElement("div");
-        const author = document.createElement("a");
-        author.className = "post-author";
-        author.textContent = p.authorName || "Пользователь";
-        if (p.authorId != null) author.href = `user.html?id=${encodeURIComponent(String(p.authorId))}`;
-
-        const meta = document.createElement("div");
-        meta.className = "post-meta";
-        const dt = p.createdAt ? new Date(Number(p.createdAt)) : null;
-        meta.textContent = dt ? dt.toLocaleString("ru-RU", { day: "2-digit", month: "short" }) : "";
-
-        metaWrap.appendChild(author);
-        metaWrap.appendChild(meta);
-
-        left.appendChild(av);
-        left.appendChild(metaWrap);
-
-        const menuBtn = document.createElement("button");
-        menuBtn.className = "btn btn-ghost";
-        menuBtn.type = "button";
-        menuBtn.setAttribute("aria-label", "Меню");
-        menuBtn.innerHTML = '<i class="fa-solid fa-ellipsis"></i>';
-
-        header.appendChild(left);
-        header.appendChild(menuBtn);
-
-        const h3 = document.createElement("h3");
-        h3.textContent = p.title || "";
-
-        const body = document.createElement("p");
-        body.textContent = p.body || "";
-
-        const tags = document.createElement("div");
-        tags.className = "post-tags";
-        const tagsStr = String(p.tags || "").trim();
-        if (tagsStr) {
-          tagsStr
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean)
-            .slice(0, 6)
-            .forEach((t) => {
-              const tag = document.createElement("span");
-              tag.className = "chip";
-              tag.textContent = t;
-              tags.appendChild(tag);
-            });
-        }
-
-        const footer = document.createElement("div");
-        footer.className = "post-footer";
-
-        const budgetWrap = document.createElement("div");
-        budgetWrap.className = "budget-wrap";
-
-        const budget = document.createElement("div");
-        budget.className = "budget";
-        budget.textContent = formatBudget(p.budgetMin, p.budgetMax);
-        budgetWrap.appendChild(budget);
-
-        const due = formatDueDate(p.dueDate);
-        if (due) {
-          const dueEl = document.createElement("div");
-          dueEl.className = "budget-meta";
-          dueEl.textContent = `Срок: ${due}`;
-          budgetWrap.appendChild(dueEl);
-        }
-
-        const actions = document.createElement("div");
-        actions.className = "post-actions";
-
-        const likeBtn = document.createElement("button");
-        likeBtn.className = "btn btn-ghost";
-        likeBtn.type = "button";
-        likeBtn.setAttribute("data-toggle", "like");
-        likeBtn.setAttribute("data-project-id", String(p.id));
-        likeBtn.dataset.count = String(Number(p.likesCount || 0));
-        likeBtn.innerHTML = `<i class="fa-regular fa-heart"></i> Нравится ${Number(p.likesCount || 0)}`;
-
-        const commentBtn = document.createElement("button");
-        commentBtn.className = "btn btn-ghost";
-        commentBtn.type = "button";
-        commentBtn.setAttribute("data-toggle", "comments");
-        commentBtn.setAttribute("data-project-id", String(p.id));
-        commentBtn.dataset.count = String(Number(p.commentsCount || 0));
-        commentBtn.innerHTML = `<i class="fa-regular fa-comment"></i> Комментарии ${Number(p.commentsCount || 0)}`;
-
-        const replyBtn = document.createElement("button");
-        replyBtn.className = "btn btn-primary";
-        replyBtn.type = "button";
-        replyBtn.textContent = "Откликнуться";
-
-        actions.appendChild(likeBtn);
-        actions.appendChild(commentBtn);
-        actions.appendChild(replyBtn);
-
-        footer.appendChild(budgetWrap);
-        footer.appendChild(actions);
-
-        card.appendChild(header);
-        card.appendChild(h3);
-        card.appendChild(body);
-        if (tags.childElementCount) card.appendChild(tags);
-        card.appendChild(footer);
-
-        feedList.appendChild(card);
-
-        bindLikeButton(likeBtn);
-        bindCommentsButton(commentBtn, { projectId: p.id, title: p.title });
-      });
+      renderFeed(items);
     } catch {
       // Фоллбек (если сервер не запущен или API недоступно) — показываем демо-ленту.
       feedList.innerHTML = "";
@@ -594,7 +642,26 @@ if (feedList) {
       note.textContent = "Демо-режим. Чтобы создавать аккаунты и проекты, запустите сервер: node server.js";
       feedList.appendChild(note);
     }
-  })();
+  };
+
+  // Инициализируем активный фильтр по разметке (если есть)
+  if (filterButtons.length) {
+    const activeBtn = filterButtons.find((b) => b.classList.contains("is-active")) || filterButtons[0];
+    activeCategory = getCategoryFromFilterButton(activeBtn);
+    setActiveFilterUi(activeCategory);
+
+    filterButtons.forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const next = getCategoryFromFilterButton(btn);
+        if (next === activeCategory) return;
+        activeCategory = next;
+        setActiveFilterUi(activeCategory);
+        await loadFeed();
+      });
+    });
+  }
+
+  loadFeed();
 }
 
 // 1.06) Рекомендации справа (без фейков) — тянем из общей БД
@@ -675,6 +742,257 @@ if (suggestedList) {
     }
   })();
 }
+
+function renderPostsInto(listEl, items) {
+  if (!listEl) return;
+  listEl.innerHTML = "";
+
+  if (!items.length) {
+    listEl.innerHTML = `<div class="muted">Пока нет постов.</div>`;
+    return;
+  }
+
+  items.forEach((p) => {
+    const card = document.createElement("article");
+    card.className = "post-card";
+
+    const header = document.createElement("div");
+    header.className = "post-header";
+
+    const left = document.createElement("div");
+
+    const av = document.createElement("div");
+    av.className = "avatar";
+    av.textContent = getInitials(p.authorName) || "Я";
+
+    const metaWrap = document.createElement("div");
+    const author = document.createElement("a");
+    author.className = "post-author";
+    author.textContent = p.authorName || "Пользователь";
+    if (p.authorId != null) author.href = `user.html?id=${encodeURIComponent(String(p.authorId))}`;
+
+    const meta = document.createElement("div");
+    meta.className = "post-meta";
+    const dt = p.createdAt ? new Date(Number(p.createdAt)) : null;
+    meta.textContent = dt ? dt.toLocaleString("ru-RU", { day: "2-digit", month: "short" }) : "";
+
+    metaWrap.appendChild(author);
+    metaWrap.appendChild(meta);
+    left.appendChild(av);
+    left.appendChild(metaWrap);
+
+    header.appendChild(left);
+
+    const body = document.createElement("p");
+    body.textContent = String(p.body || "").trim();
+
+    card.appendChild(header);
+    if (body.textContent) card.appendChild(body);
+
+    const imageData = String(p.imageData || "").trim();
+    if (imageData) {
+      const media = document.createElement("div");
+      media.className = "post-media";
+      const img = document.createElement("img");
+      img.loading = "lazy";
+      img.alt = "Изображение";
+      img.src = imageData;
+      media.appendChild(img);
+      card.appendChild(media);
+    }
+
+    const footer = document.createElement("div");
+    footer.className = "post-footer";
+
+    const metaLeft = document.createElement("div");
+    metaLeft.className = "budget-wrap";
+    metaLeft.innerHTML = `<div class="budget muted">Публикация</div>`;
+
+    const actions = document.createElement("div");
+    actions.className = "post-actions";
+
+    const likeBtn = document.createElement("button");
+    likeBtn.className = "btn btn-ghost";
+    likeBtn.type = "button";
+    likeBtn.setAttribute("data-post-id", String(p.id));
+    setLikeButtonUi(likeBtn, Boolean(p.likedByMe), Number(p.likesCount || 0));
+
+    const commentBtn = document.createElement("button");
+    commentBtn.className = "btn btn-ghost";
+    commentBtn.type = "button";
+    commentBtn.setAttribute("data-toggle", "comments");
+    commentBtn.setAttribute("data-post-id", String(p.id));
+    setCommentsButtonUi(commentBtn, Number(p.commentsCount || 0));
+
+    const repostBtn = document.createElement("button");
+    repostBtn.className = "btn btn-ghost";
+    repostBtn.type = "button";
+    repostBtn.setAttribute("data-repost-type", "post");
+    repostBtn.setAttribute("data-repost-id", String(p.id));
+    setRepostButtonUi(repostBtn, Boolean(p.repostedByMe));
+
+    actions.appendChild(likeBtn);
+    actions.appendChild(commentBtn);
+    actions.appendChild(repostBtn);
+
+    footer.appendChild(metaLeft);
+    footer.appendChild(actions);
+    card.appendChild(footer);
+
+    listEl.appendChild(card);
+
+    bindPostLikeButton(likeBtn);
+    bindPostCommentsButton(commentBtn, { postId: p.id, title: "Пост" });
+    bindRepostButton(repostBtn);
+  });
+}
+
+async function loadPostsInto(listEl, { limit = 30 } = {}) {
+  if (!listEl) return;
+  try {
+    listEl.innerHTML = `<div class="muted">Загрузка…</div>`;
+    const result = await apiFetch(`/api/posts?limit=${encodeURIComponent(String(limit))}`);
+    if (!result.ok) throw new Error("API_UNAVAILABLE");
+    const items = Array.isArray(result.data?.items) ? result.data.items : [];
+    renderPostsInto(listEl, items);
+  } catch {
+    listEl.innerHTML = `<div class="muted">Не удалось загрузить посты. Проверьте, что сервер запущен: node server.js</div>`;
+  }
+}
+
+// 1.07) Публикации на главной (index.html)
+const homePostsList = document.getElementById("homePostsList");
+if (homePostsList) {
+  loadPostsInto(homePostsList, { limit: 20 });
+}
+
+// 1.08) Создание поста (в профиле, как в соцсетях)
+document.querySelectorAll("form[data-post-composer='1']").forEach((form) => {
+  const hint = document.getElementById("postComposerHint");
+  const textarea = form.elements?.body;
+  const imageInput = form.querySelector("input[type='file'][name='image']");
+  const preview = form.querySelector(".composer-preview") || document.getElementById("postImagePreview");
+  const attachBtn = form.querySelector("[data-action='attach']");
+
+  let imageData = null;
+
+  const setHint = (text) => {
+    if (!hint) return;
+    hint.textContent = String(text || "");
+  };
+
+  const setPreview = (dataUrl) => {
+    if (!preview) return;
+    preview.innerHTML = "";
+    if (!dataUrl) return;
+
+    const box = document.createElement("div");
+    box.className = "composer-preview-box";
+
+    const img = document.createElement("img");
+    img.alt = "Предпросмотр";
+    img.src = dataUrl;
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "composer-remove";
+    remove.setAttribute("aria-label", "Убрать изображение");
+    remove.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+    remove.addEventListener("click", () => {
+      imageData = null;
+      try {
+        if (imageInput) imageInput.value = "";
+      } catch {
+        // ignore
+      }
+      setPreview(null);
+    });
+
+    box.appendChild(img);
+    box.appendChild(remove);
+    preview.appendChild(box);
+  };
+
+  if (attachBtn && imageInput) {
+    attachBtn.addEventListener("click", () => imageInput.click());
+  }
+
+  if (imageInput) {
+    imageInput.addEventListener("change", async () => {
+      const file = imageInput.files && imageInput.files[0] ? imageInput.files[0] : null;
+      if (!file) {
+        imageData = null;
+        setPreview(null);
+        return;
+      }
+      if (!/^image\//.test(file.type)) {
+        imageData = null;
+        setPreview(null);
+        return;
+      }
+      if (file.size > 1_200_000) {
+        imageData = null;
+        setPreview(null);
+        setHint("Картинка слишком большая. Выберите файл до 1.2 МБ.");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        imageData = typeof reader.result === "string" ? reader.result : null;
+        setPreview(imageData);
+        setHint("");
+      };
+      reader.onerror = () => {
+        imageData = null;
+        setPreview(null);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    if (!document.body.classList.contains("is-authed")) {
+      window.location.href = "register.html?next=profile.html";
+      return;
+    }
+
+    const body = textarea?.value?.trim?.() || "";
+    if (!body && !imageData) return;
+
+    const result = await apiFetch("/api/posts", { method: "POST", body: { body, imageData } });
+    if (!result.ok) {
+      if (result.status === 401) window.location.href = "login.html";
+      setHint("Не удалось опубликовать запись. Попробуйте ещё раз.");
+      return;
+    }
+
+    try {
+      form.reset();
+    } catch {
+      // ignore
+    }
+    imageData = null;
+    setPreview(null);
+    setHint("Опубликовано.");
+
+    // Обновим видимые ленты
+    const list1 = document.getElementById("homePostsList");
+    if (list1) await loadPostsInto(list1, { limit: 20 });
+
+    const list2 = document.getElementById("profilePostsList");
+    if (list2) {
+      // Профильная секция "Мои посты"
+      try {
+        if (typeof window.__mwLoadMyPosts === "function") await window.__mwLoadMyPosts();
+      } catch {
+        // ignore
+      }
+    }
+  });
+});
 
 // 1.07) Метрики на главной (без фейков)
 const metricUsers = document.getElementById("metricUsers");
@@ -826,7 +1144,7 @@ async function loadMyProjects() {
     likeBtn.type = "button";
     likeBtn.setAttribute("data-toggle", "like");
     likeBtn.setAttribute("data-project-id", String(p.id));
-    setLikeButtonUi(likeBtn, false, Number(p.likesCount || 0));
+    setLikeButtonUi(likeBtn, Boolean(p.likedByMe), Number(p.likesCount || 0));
 
     const commentBtn = document.createElement("button");
     commentBtn.className = "btn btn-ghost";
@@ -834,6 +1152,13 @@ async function loadMyProjects() {
     commentBtn.setAttribute("data-toggle", "comments");
     commentBtn.setAttribute("data-project-id", String(p.id));
     setCommentsButtonUi(commentBtn, Number(p.commentsCount || 0));
+
+    const repostBtn = document.createElement("button");
+    repostBtn.className = "btn btn-ghost";
+    repostBtn.type = "button";
+    repostBtn.setAttribute("data-repost-type", "project");
+    repostBtn.setAttribute("data-repost-id", String(p.id));
+    setRepostButtonUi(repostBtn, Boolean(p.repostedByMe));
 
     const editBtn = document.createElement("button");
     editBtn.className = "btn btn-secondary";
@@ -847,6 +1172,7 @@ async function loadMyProjects() {
 
     actions.appendChild(likeBtn);
     actions.appendChild(commentBtn);
+    actions.appendChild(repostBtn);
     actions.appendChild(editBtn);
     actions.appendChild(delBtn);
 
@@ -863,6 +1189,7 @@ async function loadMyProjects() {
 
     bindLikeButton(likeBtn);
     bindCommentsButton(commentBtn, { projectId: p.id, title: p.title });
+    bindRepostButton(repostBtn);
 
     editBtn.addEventListener("click", () => {
       if (!projectEditModal) return;
@@ -874,6 +1201,7 @@ async function loadMyProjects() {
       form.elements.id.value = String(p.id);
       form.elements.title.value = String(p.title || "");
       form.elements.body.value = String(p.body || "");
+      if (form.elements?.category) form.elements.category.value = p.category ? String(p.category) : "";
       form.elements.tags.value = String(p.tags || "");
       form.elements.budgetMax.value = p.budgetMax == null ? "" : String(p.budgetMax);
       if (form.elements?.dueDate) form.elements.dueDate.value = p.dueDate ? String(p.dueDate) : "";
@@ -899,6 +1227,151 @@ if (myProjectsList) {
   loadMyProjects();
 }
 
+// 1.21) Проекты: рекомендации снизу (post.html)
+const recommendedProjectsList = document.getElementById("recommendedProjectsList");
+if (recommendedProjectsList) {
+  (async () => {
+    try {
+      recommendedProjectsList.innerHTML = `<div class="muted">Загрузка…</div>`;
+      const result = await apiFetch("/api/projects");
+      if (!result.ok) throw new Error("API_UNAVAILABLE");
+
+      const items = Array.isArray(result.data?.items) ? result.data.items : [];
+      recommendedProjectsList.innerHTML = "";
+
+      if (!items.length) {
+        recommendedProjectsList.innerHTML = `<div class="muted">Пока нет проектов.</div>`;
+        return;
+      }
+
+      items.slice(0, 20).forEach((p) => {
+        const card = document.createElement("article");
+        card.className = "post-card";
+
+        const header = document.createElement("div");
+        header.className = "post-header";
+
+        const left = document.createElement("div");
+        const av = document.createElement("div");
+        av.className = "avatar";
+        av.textContent = getInitials(p.authorName) || "Я";
+
+        const metaWrap = document.createElement("div");
+        const author = document.createElement("a");
+        author.className = "post-author";
+        author.textContent = p.authorName || "Пользователь";
+        if (p.authorId != null) author.href = `user.html?id=${encodeURIComponent(String(p.authorId))}`;
+
+        const meta = document.createElement("div");
+        meta.className = "post-meta";
+        const dt = p.createdAt ? new Date(Number(p.createdAt)) : null;
+        meta.textContent = dt ? dt.toLocaleString("ru-RU", { day: "2-digit", month: "short" }) : "";
+
+        metaWrap.appendChild(author);
+        metaWrap.appendChild(meta);
+        left.appendChild(av);
+        left.appendChild(metaWrap);
+        header.appendChild(left);
+
+        const h3 = document.createElement("h3");
+        h3.textContent = p.title || "";
+
+        const body = document.createElement("p");
+        body.textContent = p.body || "";
+
+        const tags = document.createElement("div");
+        tags.className = "post-tags";
+
+        const category = String(p.category || "").trim();
+        if (category) {
+          const tag = document.createElement("span");
+          tag.className = "chip";
+          tag.textContent = category;
+          tags.appendChild(tag);
+        }
+
+        const tagsStr = String(p.tags || "").trim();
+        if (tagsStr) {
+          tagsStr
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .slice(0, 6)
+            .forEach((t) => {
+              const tag = document.createElement("span");
+              tag.className = "chip";
+              tag.textContent = t;
+              tags.appendChild(tag);
+            });
+        }
+
+        const footer = document.createElement("div");
+        footer.className = "post-footer";
+
+        const budgetWrap = document.createElement("div");
+        budgetWrap.className = "budget-wrap";
+        const budget = document.createElement("div");
+        budget.className = "budget";
+        budget.textContent = formatBudget(p.budgetMin, p.budgetMax);
+        budgetWrap.appendChild(budget);
+
+        const due = formatDueDate(p.dueDate);
+        if (due) {
+          const dueEl = document.createElement("div");
+          dueEl.className = "budget-meta";
+          dueEl.textContent = `Срок: ${due}`;
+          budgetWrap.appendChild(dueEl);
+        }
+
+        const actions = document.createElement("div");
+        actions.className = "post-actions";
+
+        const likeBtn = document.createElement("button");
+        likeBtn.className = "btn btn-ghost";
+        likeBtn.type = "button";
+        likeBtn.setAttribute("data-toggle", "like");
+        likeBtn.setAttribute("data-project-id", String(p.id));
+        setLikeButtonUi(likeBtn, Boolean(p.likedByMe), Number(p.likesCount || 0));
+
+        const commentBtn = document.createElement("button");
+        commentBtn.className = "btn btn-ghost";
+        commentBtn.type = "button";
+        commentBtn.setAttribute("data-toggle", "comments");
+        commentBtn.setAttribute("data-project-id", String(p.id));
+        setCommentsButtonUi(commentBtn, Number(p.commentsCount || 0));
+
+        const repostBtn = document.createElement("button");
+        repostBtn.className = "btn btn-ghost";
+        repostBtn.type = "button";
+        repostBtn.setAttribute("data-repost-type", "project");
+        repostBtn.setAttribute("data-repost-id", String(p.id));
+        setRepostButtonUi(repostBtn, Boolean(p.repostedByMe));
+
+        actions.appendChild(likeBtn);
+        actions.appendChild(commentBtn);
+        actions.appendChild(repostBtn);
+
+        footer.appendChild(budgetWrap);
+        footer.appendChild(actions);
+
+        card.appendChild(header);
+        card.appendChild(h3);
+        card.appendChild(body);
+        if (tags.childElementCount) card.appendChild(tags);
+        card.appendChild(footer);
+
+        recommendedProjectsList.appendChild(card);
+
+        bindLikeButton(likeBtn);
+        bindCommentsButton(commentBtn, { projectId: p.id, title: p.title });
+        bindRepostButton(repostBtn);
+      });
+    } catch {
+      recommendedProjectsList.innerHTML = `<div class="muted">Не удалось загрузить рекомендации. Проверьте, что сервер запущен: node server.js</div>`;
+    }
+  })();
+}
+
 // Редактирование проекта (модалка)
 if (projectEditModal) {
   wireModal(projectEditModal);
@@ -911,6 +1384,7 @@ if (projectEditModal) {
       const id = Number(form.elements?.id?.value);
       const title = form.elements?.title?.value?.trim?.() || "";
       const body = form.elements?.body?.value?.trim?.() || "";
+      const category = form.elements?.category?.value?.trim?.() || "";
       const tags = form.elements?.tags?.value?.trim?.() || "";
       const budgetMaxRaw = form.elements?.budgetMax?.value;
       const budgetMax = budgetMaxRaw === "" || budgetMaxRaw == null ? null : Number(budgetMaxRaw);
@@ -925,6 +1399,7 @@ if (projectEditModal) {
         body: {
           title,
           body,
+          category,
           tags,
           budgetMin: null,
           budgetMax: Number.isFinite(budgetMax) ? budgetMax : null,
@@ -955,6 +1430,7 @@ if (projectForm) {
 
     const title = projectForm.elements?.title?.value?.trim?.() || "";
     const body = projectForm.elements?.body?.value?.trim?.() || "";
+    const category = projectForm.elements?.category?.value?.trim?.() || "";
     const tags = projectForm.elements?.tags?.value?.trim?.() || "";
     const budgetMaxRaw = projectForm.elements?.budgetMax?.value;
     const budgetMax = budgetMaxRaw == null ? null : Number(budgetMaxRaw);
@@ -968,6 +1444,7 @@ if (projectForm) {
       body: {
         title,
         body,
+        category,
         tags,
         budgetMin: null,
         budgetMax: Number.isFinite(budgetMax) ? budgetMax : null,
@@ -994,10 +1471,11 @@ if (projectForm) {
     previewBtn.addEventListener("click", () => {
       const title = projectForm.elements?.title?.value?.trim?.() || "Без названия";
       const body = projectForm.elements?.body?.value?.trim?.() || "Описание не заполнено.";
-    const tagsStr = projectForm.elements?.tags?.value?.trim?.() || "";
-    const budgetMaxRaw = projectForm.elements?.budgetMax?.value;
-    const budgetMax = budgetMaxRaw == null ? null : Number(budgetMaxRaw);
-    const dueDate = projectForm.elements?.dueDate?.value || null;
+      const category = projectForm.elements?.category?.value?.trim?.() || "";
+      const tagsStr = projectForm.elements?.tags?.value?.trim?.() || "";
+      const budgetMaxRaw = projectForm.elements?.budgetMax?.value;
+      const budgetMax = budgetMaxRaw == null ? null : Number(budgetMaxRaw);
+      const dueDate = projectForm.elements?.dueDate?.value || null;
 
       const wrap = document.getElementById("projectPreviewBody");
       if (!wrap) return;
@@ -1014,6 +1492,15 @@ if (projectForm) {
 
       const tags = document.createElement("div");
       tags.className = "post-tags";
+
+      const categoryLabel = String(category || "").trim();
+      if (categoryLabel) {
+        const tag = document.createElement("span");
+        tag.className = "chip";
+        tag.textContent = categoryLabel;
+        tags.appendChild(tag);
+      }
+
       if (tagsStr) {
         tagsStr
           .split(",")
@@ -1222,8 +1709,7 @@ if (userProjectsList) {
       likeBtn.type = "button";
       likeBtn.setAttribute("data-toggle", "like");
       likeBtn.setAttribute("data-project-id", String(p.id));
-      likeBtn.dataset.count = String(Number(p.likesCount || 0));
-      likeBtn.innerHTML = `<i class="fa-regular fa-heart"></i> Нравится ${Number(p.likesCount || 0)}`;
+      setLikeButtonUi(likeBtn, Boolean(p.likedByMe), Number(p.likesCount || 0));
 
       const commentBtn = document.createElement("button");
       commentBtn.className = "btn btn-ghost";
@@ -1233,8 +1719,16 @@ if (userProjectsList) {
       commentBtn.dataset.count = String(Number(p.commentsCount || 0));
       setCommentsButtonUi(commentBtn, Number(p.commentsCount || 0));
 
+      const repostBtn = document.createElement("button");
+      repostBtn.className = "btn btn-ghost";
+      repostBtn.type = "button";
+      repostBtn.setAttribute("data-repost-type", "project");
+      repostBtn.setAttribute("data-repost-id", String(p.id));
+      setRepostButtonUi(repostBtn, Boolean(p.repostedByMe));
+
       actions.appendChild(likeBtn);
       actions.appendChild(commentBtn);
+      actions.appendChild(repostBtn);
 
       footer.appendChild(budgetWrap);
       footer.appendChild(actions);
@@ -1248,6 +1742,7 @@ if (userProjectsList) {
       userProjectsList.appendChild(card);
       bindLikeButton(likeBtn);
       bindCommentsButton(commentBtn, { projectId: p.id, title: p.title });
+      bindRepostButton(repostBtn);
     });
   })();
 }
@@ -1326,6 +1821,133 @@ if (profileProjectsList) {
       card.appendChild(footer);
 
       profileProjectsList.appendChild(card);
+    });
+  })();
+}
+
+// 1.26) Профиль: мои посты
+const profilePostsList = document.getElementById("profilePostsList");
+if (profilePostsList) {
+  const renderMyPosts = (items) => {
+    profilePostsList.innerHTML = "";
+
+    if (!items.length) {
+      profilePostsList.innerHTML = `<div class="muted">У вас пока нет постов. Напишите первую запись выше.</div>`;
+      return;
+    }
+
+    items.slice(0, 10).forEach((p) => {
+      const card = document.createElement("article");
+      card.className = "post-card";
+
+      const body = document.createElement("p");
+      body.textContent = String(p.body || "").trim();
+      if (body.textContent) card.appendChild(body);
+
+      const imageData = String(p.imageData || "").trim();
+      if (imageData) {
+        const media = document.createElement("div");
+        media.className = "post-media";
+        const img = document.createElement("img");
+        img.loading = "lazy";
+        img.alt = "Изображение";
+        img.src = imageData;
+        media.appendChild(img);
+        card.appendChild(media);
+      }
+
+      profilePostsList.appendChild(card);
+    });
+  };
+
+  const loadMyPosts = async () => {
+    profilePostsList.innerHTML = `<div class="muted">Загрузка…</div>`;
+
+    const result = await apiFetch("/api/my/posts");
+    if (!result.ok) {
+      if (result.status === 401) window.location.href = "login.html";
+      profilePostsList.innerHTML = `<div class="muted">Не удалось загрузить посты.</div>`;
+      return;
+    }
+
+    const items = Array.isArray(result.data?.items) ? result.data.items : [];
+    renderMyPosts(items);
+  };
+
+  profilePostsList.dataset.loader = "my-posts";
+  window.__mwLoadMyPosts = loadMyPosts;
+  loadMyPosts();
+}
+
+// 1.27) Профиль: репосты
+const profileRepostsList = document.getElementById("profileRepostsList");
+if (profileRepostsList) {
+  (async () => {
+    profileRepostsList.innerHTML = `<div class="muted">Загрузка…</div>`;
+
+    const result = await apiFetch("/api/my/reposts");
+    if (!result.ok) {
+      if (result.status === 401) window.location.href = "login.html";
+      profileRepostsList.innerHTML = `<div class="muted">Не удалось загрузить репосты.</div>`;
+      return;
+    }
+
+    const items = Array.isArray(result.data?.items) ? result.data.items : [];
+    profileRepostsList.innerHTML = "";
+
+    if (!items.length) {
+      profileRepostsList.innerHTML = `<div class="muted">Пока нет репостов.</div>`;
+      return;
+    }
+
+    items.slice(0, 20).forEach((x) => {
+      if (x.kind === "post") {
+        const card = document.createElement("article");
+        card.className = "post-card";
+
+        const head = document.createElement("div");
+        head.className = "post-meta muted";
+        head.textContent = "Репост поста";
+
+        const body = document.createElement("p");
+        body.textContent = String(x.body || "").trim();
+
+        card.appendChild(head);
+        if (body.textContent) card.appendChild(body);
+
+        const imageData = String(x.imageData || "").trim();
+        if (imageData) {
+          const media = document.createElement("div");
+          media.className = "post-media";
+          const img = document.createElement("img");
+          img.loading = "lazy";
+          img.alt = "Изображение";
+          img.src = imageData;
+          media.appendChild(img);
+          card.appendChild(media);
+        }
+
+        profileRepostsList.appendChild(card);
+        return;
+      }
+
+      const card = document.createElement("article");
+      card.className = "post-card";
+
+      const head = document.createElement("div");
+      head.className = "post-meta muted";
+      head.textContent = "Репост проекта";
+
+      const h3 = document.createElement("h3");
+      h3.textContent = x.title || "";
+
+      const body = document.createElement("p");
+      body.textContent = x.body || "";
+
+      card.appendChild(head);
+      card.appendChild(h3);
+      card.appendChild(body);
+      profileRepostsList.appendChild(card);
     });
   })();
 }
@@ -1443,28 +2065,112 @@ function setCommentsButtonUi(btn, count) {
   btn.innerHTML = `<i class="fa-regular fa-comment"></i> Комментарии ${Number(btn.dataset.count)}`;
 }
 
+function setRepostButtonUi(btn, reposted) {
+  btn.classList.toggle("is-active", Boolean(reposted));
+  btn.innerHTML = `<i class="fa-solid fa-retweet"></i> ${reposted ? "Убрать репост" : "Репост"}`;
+}
+
 function bindLikeButton(btn) {
   if (!btn || btn.dataset.bound === "1") return;
   btn.dataset.bound = "1";
 
   btn.addEventListener("click", async () => {
+    if (btn.dataset.busy === "1") return;
+    btn.dataset.busy = "1";
+
     const projectId = btn.getAttribute("data-project-id");
     const wasLiked = btn.classList.contains("is-active");
     const prevCount = Number(btn.dataset.count || 0);
 
-    if (projectId) {
-      const result = await apiFetch(`/api/like/${projectId}`, { method: "POST" });
+    btn.disabled = true;
+    try {
+      if (projectId) {
+        const result = await apiFetch(`/api/like/${projectId}`, { method: "POST" });
+        if (!result.ok) {
+          if (result.status === 401) window.location.href = "login.html";
+          return;
+        }
+        const nowLiked = Boolean(result.data?.liked);
+
+        // Счётчик берём с сервера, чтобы не "крутить" лайки после перезагрузки/смены аккаунта.
+        const serverCount = Number(result.data?.likesCount);
+        const nextCount = Number.isFinite(serverCount)
+          ? serverCount
+          : nowLiked === wasLiked
+            ? prevCount
+            : prevCount + (nowLiked ? 1 : -1);
+
+        setLikeButtonUi(btn, nowLiked, Math.max(0, nextCount));
+      } else {
+        const nowLiked = !wasLiked;
+        const nextCount = prevCount + (nowLiked ? 1 : -1);
+        setLikeButtonUi(btn, nowLiked, Math.max(0, nextCount));
+      }
+    } finally {
+      btn.disabled = false;
+      btn.dataset.busy = "0";
+    }
+  });
+}
+
+function bindPostLikeButton(btn) {
+  if (!btn || btn.dataset.boundPostLike === "1") return;
+  btn.dataset.boundPostLike = "1";
+
+  btn.addEventListener("click", async () => {
+    if (btn.dataset.busy === "1") return;
+    btn.dataset.busy = "1";
+    btn.disabled = true;
+
+    const postId = btn.getAttribute("data-post-id");
+    const wasLiked = btn.classList.contains("is-active");
+    const prevCount = Number(btn.dataset.count || 0);
+
+    try {
+      const result = await apiFetch(`/api/post-like/${postId}`, { method: "POST" });
       if (!result.ok) {
         if (result.status === 401) window.location.href = "login.html";
         return;
       }
+
       const nowLiked = Boolean(result.data?.liked);
-      const nextCount = nowLiked === wasLiked ? prevCount : prevCount + (nowLiked ? 1 : -1);
+      const serverCount = Number(result.data?.likesCount);
+      const nextCount = Number.isFinite(serverCount)
+        ? serverCount
+        : nowLiked === wasLiked
+          ? prevCount
+          : prevCount + (nowLiked ? 1 : -1);
+
       setLikeButtonUi(btn, nowLiked, Math.max(0, nextCount));
-    } else {
-      const nowLiked = !wasLiked;
-      const nextCount = prevCount + (nowLiked ? 1 : -1);
-      setLikeButtonUi(btn, nowLiked, Math.max(0, nextCount));
+    } finally {
+      btn.disabled = false;
+      btn.dataset.busy = "0";
+    }
+  });
+}
+
+function bindRepostButton(btn) {
+  if (!btn || btn.dataset.boundRepost === "1") return;
+  btn.dataset.boundRepost = "1";
+
+  btn.addEventListener("click", async () => {
+    if (btn.dataset.busy === "1") return;
+    btn.dataset.busy = "1";
+    btn.disabled = true;
+
+    const type = String(btn.getAttribute("data-repost-type") || "").trim();
+    const id = btn.getAttribute("data-repost-id");
+
+    try {
+      const result = await apiFetch("/api/repost", { method: "POST", body: { type, id: Number(id) } });
+      if (!result.ok) {
+        if (result.status === 401) window.location.href = "login.html";
+        return;
+      }
+      setRepostButtonUi(btn, Boolean(result.data?.reposted));
+    } finally {
+      btn.disabled = false;
+      btn.dataset.busy = "0";
     }
   });
 }
@@ -1505,8 +2211,9 @@ function ensureCommentsModal() {
   return modal;
 }
 
-async function openComments(projectId, title) {
-  const id = Number(projectId);
+async function openCommentsFor(kind, targetId, title) {
+  const safeKind = kind === "post" ? "post" : "project";
+  const id = Number(targetId);
   if (!Number.isFinite(id)) return;
 
   const modal = ensureCommentsModal();
@@ -1515,21 +2222,24 @@ async function openComments(projectId, title) {
   const listEl = modal.querySelector("#commentsList");
   const form = modal.querySelector("#commentForm");
 
-  modal.dataset.projectId = String(id);
-  modal.dataset.projectTitle = String(title || "Проект");
+  modal.dataset.targetKind = safeKind;
+  modal.dataset.targetId = String(id);
+  modal.dataset.targetTitle = String(title || (safeKind === "post" ? "Пост" : "Проект"));
 
   if (titleEl) titleEl.textContent = "Комментарии";
-  if (subtitleEl) subtitleEl.textContent = String(title || "Проект");
+  if (subtitleEl) subtitleEl.textContent = String(title || (safeKind === "post" ? "Пост" : "Проект"));
 
   if (listEl) listEl.innerHTML = `<div class="muted">Загрузка…</div>`;
 
   openModal(modal);
 
   const refresh = async () => {
-    const pid = Number(modal.dataset.projectId);
-    if (!Number.isFinite(pid)) return;
+    const k = String(modal.dataset.targetKind || "project");
+    const tid = Number(modal.dataset.targetId);
+    if (!Number.isFinite(tid)) return;
 
-    const result = await apiFetch(`/api/projects/${pid}/comments`);
+    const url = k === "post" ? `/api/posts/${tid}/comments` : `/api/projects/${tid}/comments`;
+    const result = await apiFetch(url);
     if (!result.ok) {
       if (listEl) listEl.innerHTML = `<div class="muted">Не удалось загрузить комментарии.</div>`;
       return;
@@ -1563,19 +2273,21 @@ async function openComments(projectId, title) {
         head.appendChild(author);
         head.appendChild(time);
 
-        const body = document.createElement("div");
-        body.textContent = c.body || "";
+        const bodyEl = document.createElement("div");
+        bodyEl.textContent = c.body || "";
 
         item.appendChild(head);
-        item.appendChild(body);
+        item.appendChild(bodyEl);
         listEl?.appendChild(item);
       });
     }
 
-    // Синхронизируем счётчик на всех кнопках комментариев для этого проекта
-    document.querySelectorAll(`[data-toggle="comments"][data-project-id="${pid}"]`).forEach((btn) => {
-      setCommentsButtonUi(btn, items.length);
-    });
+    // Синхронизируем счётчик на всех кнопках комментариев для этой сущности
+    const selector =
+      k === "post"
+        ? `[data-toggle="comments"][data-post-id="${tid}"]`
+        : `[data-toggle="comments"][data-project-id="${tid}"]`;
+    document.querySelectorAll(selector).forEach((btn) => setCommentsButtonUi(btn, items.length));
   };
 
   await refresh();
@@ -1590,10 +2302,12 @@ async function openComments(projectId, title) {
       const body = textarea?.value?.trim?.() || "";
       if (!body) return;
 
-      const pid = Number(modal.dataset.projectId);
-      if (!Number.isFinite(pid)) return;
+      const k = String(modal.dataset.targetKind || "project");
+      const tid = Number(modal.dataset.targetId);
+      if (!Number.isFinite(tid)) return;
 
-      const result = await apiFetch(`/api/projects/${pid}/comments`, { method: "POST", body: { body } });
+      const url = k === "post" ? `/api/posts/${tid}/comments` : `/api/projects/${tid}/comments`;
+      const result = await apiFetch(url, { method: "POST", body: { body } });
       if (!result.ok) {
         if (result.status === 401) window.location.href = "login.html";
         return;
@@ -1609,6 +2323,10 @@ async function openComments(projectId, title) {
   }
 }
 
+async function openComments(projectId, title) {
+  return openCommentsFor("project", projectId, title);
+}
+
 function bindCommentsButton(btn, ctx = {}) {
   if (!btn || btn.dataset.boundComments === "1") return;
   btn.dataset.boundComments = "1";
@@ -1617,6 +2335,16 @@ function bindCommentsButton(btn, ctx = {}) {
     const projectId = btn.getAttribute("data-project-id") || ctx.projectId;
     const title = ctx.title || btn.getAttribute("data-project-title") || "Проект";
     await openComments(projectId, title);
+  });
+}
+
+function bindPostCommentsButton(btn, ctx = {}) {
+  if (!btn || btn.dataset.boundPostComments === "1") return;
+  btn.dataset.boundPostComments = "1";
+
+  btn.addEventListener("click", async () => {
+    const idRaw = btn.getAttribute("data-post-id") || ctx.postId;
+    await openCommentsFor("post", idRaw, ctx.title || "Пост");
   });
 }
 
@@ -1647,7 +2375,8 @@ function bindFollowButton(btn) {
 
 document.querySelectorAll("[data-toggle='like']").forEach(bindLikeButton);
 document.querySelectorAll("[data-toggle='follow']").forEach(bindFollowButton);
-document.querySelectorAll("[data-toggle='comments']").forEach((btn) => bindCommentsButton(btn));
+document.querySelectorAll("[data-toggle='comments'][data-project-id]").forEach((btn) => bindCommentsButton(btn));
+document.querySelectorAll("[data-toggle='comments'][data-post-id]").forEach((btn) => bindPostCommentsButton(btn));
 
 const chips = document.querySelectorAll(".chip");
 chips.forEach((chip) => {
