@@ -777,7 +777,6 @@ async function main() {
     const imageDataRaw = req.body?.imageData;
     const imageData = imageDataRaw === undefined ? undefined : String(imageDataRaw || "").trim();
 
-    if (!body && imageData !== undefined && !imageData) return jsonError(res, 400, "BODY_OR_IMAGE_REQUIRED");
     if (body.length > 4000) return jsonError(res, 400, "BODY_TOO_LONG");
 
     let nextImage = existing.imageData == null ? null : String(existing.imageData);
@@ -789,6 +788,9 @@ async function main() {
         nextImage = imageData;
       }
     }
+
+    // Нельзя сохранить полностью пустой пост (без текста и без картинки).
+    if (!body && !nextImage) return jsonError(res, 400, "BODY_OR_IMAGE_REQUIRED");
 
     await db.run("UPDATE posts SET body = ?, image_data = ? WHERE id = ?", [body, nextImage, id]);
     res.json({ ok: true });

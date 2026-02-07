@@ -1840,6 +1840,12 @@ if (profilePostsList) {
       const card = document.createElement("article");
       card.className = "post-card";
 
+      const meta = document.createElement("div");
+      meta.className = "post-meta";
+      const dt = p.createdAt ? new Date(Number(p.createdAt)) : null;
+      meta.textContent = dt ? dt.toLocaleString("ru-RU", { day: "2-digit", month: "short" }) : "Публикация";
+      card.appendChild(meta);
+
       const body = document.createElement("p");
       body.textContent = String(p.body || "").trim();
       if (body.textContent) card.appendChild(body);
@@ -1855,6 +1861,58 @@ if (profilePostsList) {
         media.appendChild(img);
         card.appendChild(media);
       }
+
+      const footer = document.createElement("div");
+      footer.className = "post-footer";
+
+      const left = document.createElement("div");
+      left.className = "budget-wrap";
+      left.innerHTML = `<div class="budget muted">Пост</div>`;
+
+      const actions = document.createElement("div");
+      actions.className = "post-actions";
+
+      const editBtn = document.createElement("button");
+      editBtn.className = "btn btn-secondary";
+      editBtn.type = "button";
+      editBtn.innerHTML = '<i class="fa-solid fa-pen-to-square"></i> Редактировать';
+
+      const delBtn = document.createElement("button");
+      delBtn.className = "btn btn-ghost is-danger";
+      delBtn.type = "button";
+      delBtn.innerHTML = '<i class="fa-solid fa-trash"></i> Удалить';
+
+      actions.appendChild(editBtn);
+      actions.appendChild(delBtn);
+
+      footer.appendChild(left);
+      footer.appendChild(actions);
+      card.appendChild(footer);
+
+      editBtn.addEventListener("click", () => openPostEdit(p));
+
+      delBtn.addEventListener("click", async () => {
+        const ok = window.confirm("Удалить пост? Это действие нельзя отменить.");
+        if (!ok) return;
+
+        const resp = await apiFetch(`/api/posts/${p.id}`, { method: "DELETE" });
+        if (!resp.ok) {
+          if (resp.status === 401) window.location.href = "login.html";
+          return;
+        }
+
+        try {
+          if (typeof window.__mwLoadMyPosts === "function") await window.__mwLoadMyPosts();
+        } catch {
+          // ignore
+        }
+        try {
+          const list = document.getElementById("homePostsList");
+          if (list) await loadPostsInto(list, { limit: 20 });
+        } catch {
+          // ignore
+        }
+      });
 
       profilePostsList.appendChild(card);
     });
@@ -2068,6 +2126,187 @@ function setCommentsButtonUi(btn, count) {
 function setRepostButtonUi(btn, reposted) {
   btn.classList.toggle("is-active", Boolean(reposted));
   btn.innerHTML = `<i class="fa-solid fa-retweet"></i> ${reposted ? "Убрать репост" : "Репост"}`;
+}
+
+function ensurePostEditModal() {
+  let modal = document.getElementById("postEditModal");
+  if (modal) return modal;
+
+  modal = document.createElement("div");
+  modal.className = "modal";
+  modal.id = "postEditModal";
+  modal.setAttribute("aria-hidden", "true");
+
+  modal.innerHTML = `
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="postEditTitle">
+      <div class="modal-header">
+        <h2 id="postEditTitle">Редактировать пост</h2>
+        <button class="btn btn-ghost" type="button" aria-label="Закрыть" data-close-modal><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="muted" id="postEditHint"></div>
+
+      <form id="postEditForm">
+        <input type="hidden" name="id" />
+        <label>
+          Текст
+          <textarea name="body" rows="5" placeholder="Текст поста"></textarea>
+        </label>
+
+        <div class="composer">
+          <div class="composer-preview" id="postEditPreview"></div>
+          <div class="composer-actions">
+            <input class="composer-file" type="file" name="image" accept="image/*" />
+            <button class="btn btn-ghost" type="button" data-action="attach-edit">
+              <i class="fa-solid fa-paperclip"></i> Прикрепить
+            </button>
+            <button class="btn btn-primary" type="submit">Сохранить</button>
+            <button class="btn btn-ghost" type="button" data-close-modal>Отмена</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+  wireModal(modal);
+
+  return modal;
+}
+
+function openPostEdit(post) {
+  const id = Number(post?.id);
+  if (!Number.isFinite(id)) return;
+
+  const modal = ensurePostEditModal();
+  const hint = modal.querySelector("#postEditHint");
+  const form = modal.querySelector("#postEditForm");
+  const preview = modal.querySelector("#postEditPreview");
+  const attachBtn = modal.querySelector("[data-action='attach-edit']");
+  const imageInput = form?.elements?.image;
+
+  if (!form) return;
+
+  // Состояние картинки: keep | remove | replace
+  modal.dataset.imageMode = "keep";
+  modal.dataset.imageData = "";
+
+  const setHint = (text) => {
+    if (!hint) return;
+    hint.textContent = String(text || "");
+  };
+
+  const setPreview = (dataUrl) => {
+    if (!preview) return;
+    preview.innerHTML = "";
+    if (!dataUrl) return;
+
+    const box = document.createElement("div");
+    box.className = "composer-preview-box";
+
+    const img = document.createElement("img");
+    img.alt = "Предпросмотр";
+    img.src = dataUrl;
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "composer-remove";
+    remove.setAttribute("aria-label", "Убрать изображение");
+    remove.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+    remove.addEventListener("click", () => {
+      modal.dataset.imageMode = "remove";
+      modal.dataset.imageData = "";
+      try {
+        if (imageInput) imageInput.value = "";
+      } catch {
+        // ignore
+      }
+      setPreview(null);
+    });
+
+    box.appendChild(img);
+    box.appendChild(remove);
+    preview.appendChild(box);
+  };
+
+  // Заполняем форму
+  form.elements.id.value = String(id);
+  form.elements.body.value = String(post?.body || "");
+  setHint("");
+
+  const existingImage = String(post?.imageData || "").trim();
+  if (existingImage) setPreview(existingImage);
+  else setPreview(null);
+
+  if (attachBtn && imageInput && attachBtn.dataset.bound !== "1") {
+    attachBtn.dataset.bound = "1";
+    attachBtn.addEventListener("click", () => imageInput.click());
+  }
+
+  if (imageInput && imageInput.dataset.bound !== "1") {
+    imageInput.dataset.bound = "1";
+    imageInput.addEventListener("change", async () => {
+      const file = imageInput.files && imageInput.files[0] ? imageInput.files[0] : null;
+      if (!file) return;
+      if (!/^image\//.test(file.type)) return;
+      if (file.size > 1_200_000) {
+        setHint("Картинка слишком большая. Выберите файл до 1.2 МБ.");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = typeof reader.result === "string" ? reader.result : "";
+        if (!dataUrl) return;
+        modal.dataset.imageMode = "replace";
+        modal.dataset.imageData = dataUrl;
+        setPreview(dataUrl);
+        setHint("");
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  if (form.dataset.bound !== "1") {
+    form.dataset.bound = "1";
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const postId = Number(form.elements?.id?.value);
+      if (!Number.isFinite(postId)) return;
+
+      const body = form.elements?.body?.value?.trim?.() || "";
+      const mode = String(modal.dataset.imageMode || "keep");
+      const imageData = String(modal.dataset.imageData || "");
+
+      const payload = { body };
+      if (mode === "remove") payload.imageData = "";
+      if (mode === "replace") payload.imageData = imageData;
+
+      const result = await apiFetch(`/api/posts/${postId}`, { method: "PUT", body: payload });
+      if (!result.ok) {
+        if (result.status === 401) window.location.href = "login.html";
+        setHint("Не удалось сохранить изменения.");
+        return;
+      }
+
+      closeModal(modal);
+      try {
+        if (typeof window.__mwLoadMyPosts === "function") await window.__mwLoadMyPosts();
+      } catch {
+        // ignore
+      }
+      try {
+        const list = document.getElementById("homePostsList");
+        if (list) await loadPostsInto(list, { limit: 20 });
+      } catch {
+        // ignore
+      }
+    });
+  }
+
+  openModal(modal);
 }
 
 function bindLikeButton(btn) {
