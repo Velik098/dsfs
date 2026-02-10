@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Moneyway — Условия обслуживания</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="page-legal" data-page="legal">
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="topbar-brand brand" href="index.html" aria-label="Moneyway — Лента">
+        <div class="brand-icon">MW</div>
+        <div>
+          <div class="brand-title">Moneyway</div>
+          <div class="brand-subtitle">Социальная фриланс-сеть</div>
+        </div>
+      </a>
+
+      <div class="topbar-center">
+        <div class="search search--compact">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="search" placeholder="Поиск по сайту" />
+        </div>
+
+        <div class="topbar-actions">
+          <button class="btn btn-ghost" aria-label="Уведомления"><i class="fa-regular fa-bell"></i></button>
+          <div class="auth-actions">
+            <a class="btn btn-ghost" href="login.html">Войти</a>
+            <a class="btn btn-primary" href="register.html">Регистрация</a>
+          </div>
+          <div class="profile-menu" data-profile-menu>
+            <button class="avatar avatar-button" type="button" aria-label="Меню профиля" aria-haspopup="menu" aria-expanded="false" data-profile-menu-button>Я</button>
+            <div class="profile-dropdown" role="menu" aria-label="Профиль" data-profile-menu-dropdown>
+              <a class="menu-item" role="menuitem" href="profile.html#edit-profile"><i class="fa-solid fa-user-gear"></i>Управление аккаунтом</a>
+              <a class="menu-item" role="menuitem" href="settings.html"><i class="fa-solid fa-gear"></i>Настройки</a>
+              <div class="menu-sep" role="separator"></div>
+              <button class="menu-item" type="button" role="menuitem" data-action="switch-account"><i class="fa-solid fa-right-left"></i>Сменить аккаунт</button>
+              <button class="menu-item" type="button" role="menuitem" data-action="logout"><i class="fa-solid fa-right-from-bracket"></i>Выйти</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <aside class="sidebar">
+      <nav class="nav">
+        <a class="nav-link" href="index.html"><i class="fa-solid fa-house"></i>Лента</a>
+        <a class="nav-link" href="profile.html" data-auth-required="1"><i class="fa-solid fa-user"></i>Профиль</a>
+        <a class="nav-link" href="post.html" data-auth-required="1"><i class="fa-solid fa-pen"></i>Проекты</a>
+        <a class="nav-link" href="messages.html" data-auth-required="1"><i class="fa-solid fa-comments"></i>Сообщения<span class="nav-badge" data-badge="messages" aria-hidden="true"></span></a>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <section class="settings-grid">
+        <article class="settings-card legal-doc">
+          <h1>Условия обслуживания Moneyway</h1>
+          <div class="muted">Обновлено: 7 февраля 2026</div>
+
+          <p>Эти условия описывают правила использования Moneyway (далее — «Сервис»). Используя Сервис, вы подтверждаете, что прочитали и принимаете эти правила.</p>
+
+          <h2>1. Термины</h2>
+          <ul>
+            <li><strong>Пользователь</strong> — человек, который просматривает или использует Сервис.</li>
+            <li><strong>Аккаунт</strong> — учётная запись пользователя в Сервисе.</li>
+            <li><strong>Контент</strong> — публикации, проекты, комментарии, сообщения и другие материалы, которые вы создаёте или загружаете.</li>
+          </ul>
+
+          <h2>2. Регистрация и доступ</h2>
+          <ul>
+            <li>Для создания аккаунта требуется почта или номер телефона и пароль.</li>
+            <li>Вы отвечаете за сохранность доступа к аккаунту и за действия, совершённые под вашим аккаунтом.</li>
+            <li>Мы можем ограничить доступ к аккаунту при подозрении на взлом, нарушение правил или злоупотребления.</li>
+          </ul>
+
+          <h2>3. Контент и права</h2>
+          <ul>
+            <li>Вы сохраняете права на свой контент. Вы предоставляете Сервису право хранить, обрабатывать и показывать контент другим пользователям в рамках работы Сервиса.</li>
+            <li>Не публикуйте материалы, на которые у вас нет прав (чужие тексты, изображения, бренды), если у вас нет разрешения.</li>
+            <li>Сервис может удалять контент, если он нарушает правила или закон.</li>
+          </ul>
+
+          <h2>4. Проекты, публикации, лайки и комментарии</h2>
+          <ul>
+            <li>Проекты и посты могут быть видны другим пользователям и гостям (если страница доступна без входа).</li>
+            <li>Лайки, комментарии и репосты предназначены для общения и оценки, а не для накрутки и манипуляций.</li>
+            <li>Запрещены массовые автоматизированные действия (боты, скрипты), вмешательство в работу счётчиков и API.</li>
+          </ul>
+
+          <h2>5. Сообщения</h2>
+          <ul>
+            <li>Личные сообщения доступны только участникам диалога.</li>
+            <li>Запрещены угрозы, травля, вымогательство, рассылка спама и навязчивые предложения.</li>
+          </ul>
+
+          <h2>6. Запрещённые действия</h2>
+          <ul>
+            <li>Публикация незаконного контента, материалов 18+ без ограничений, призывов к насилию, экстремизма.</li>
+            <li>Фишинг, вредоносные ссылки, попытки получить доступ к чужим аккаунтам или данным.</li>
+            <li>Создание клонов аккаунтов, выдача себя за другого человека или организацию.</li>
+          </ul>
+
+          <h2>7. Ограничение ответственности</h2>
+          <ul>
+            <li>Сервис предоставляется «как есть». Мы стараемся поддерживать стабильную работу, но не гарантируем отсутствие ошибок и перерывов.</li>
+            <li>Мы не несём ответственность за сделки и договорённости между пользователями, заключённые вне Сервиса.</li>
+          </ul>
+
+          <h2>8. Изменения условий</h2>
+          <p>Мы можем обновлять эти условия. Новая редакция вступает в силу после публикации на этой странице.</p>
+
+          <h2>9. Документы и контакты</h2>
+          <p>Связанные документы: <a href="privacy.html">Политика конфиденциальности</a>, <a href="cookies.html">Политика использования cookie-файлов</a>, <a href="accessibility.html">Специальные возможности</a>, <a href="ads.html">Информация о рекламе</a>.</p>
+
+          <div class="legal-doc-footer muted">
+            <a href="terms.html">Условия обслуживания</a>
+            <span>|</span>
+            <a href="privacy.html">Политика конфиденциальности</a>
+            <span>|</span>
+            <a href="cookies.html">Политика использования cookie-файлов</a>
+            <span>|</span>
+            <a href="accessibility.html">Специальные возможности</a>
+            <span>|</span>
+            <a href="ads.html">Информация о рекламе</a>
+            <span>·</span>
+            <span>© 2026</span>
+          </div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <script src="assets/js/app.js"></script>
+</body>
+</html>

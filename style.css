@@ -388,6 +388,118 @@ body.is-modal-open {
   gap: 24px;
 }
 
+.rightbar-legal {
+  margin-top: auto;
+  text-align: right;
+  font-size: 12px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  justify-content: flex-end;
+}
+
+.legal-link {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.legal-link:hover {
+  color: var(--text);
+}
+
+.legal-sep {
+  color: var(--muted);
+}
+
+.legal-copy {
+  color: var(--muted);
+}
+
+.legal-doc h1 {
+  font-size: 20px;
+  line-height: 1.25;
+  margin-bottom: 6px;
+}
+
+.legal-doc h2 {
+  font-size: 16px;
+  line-height: 1.3;
+  margin-top: 16px;
+}
+
+.legal-doc p {
+  margin-top: 10px;
+  color: var(--text);
+}
+
+.legal-doc .muted {
+  margin-top: 4px;
+}
+
+.legal-doc ul,
+.legal-doc ol {
+  margin-top: 10px;
+  padding-left: 20px;
+}
+
+.legal-doc li {
+  margin: 6px 0;
+  list-style: disc;
+}
+
+.legal-doc ol li {
+  list-style: decimal;
+}
+
+.legal-doc a {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: rgba(231, 233, 234, 0.28);
+  text-underline-offset: 3px;
+}
+
+.legal-doc a:hover {
+  text-decoration-color: rgba(231, 233, 234, 0.55);
+}
+
+.legal-doc code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+
+.legal-doc-footer {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.legal-doc-footer a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.legal-doc-footer a:hover {
+  color: var(--text);
+}
+
+.legal-doc-footer span {
+  color: var(--muted);
+}
+
 .suggested-list {
   display: flex;
   flex-direction: column;
@@ -1255,6 +1367,46 @@ textarea {
 .auth-footer {
   text-align: center;
   font-size: 13px;
+  color: var(--muted);
+}
+
+.auth-terms {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.auth-terms a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.auth-terms a:hover {
+  text-decoration: underline;
+}
+
+.auth-legal {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  justify-content: center;
+}
+
+.auth-legal a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.auth-legal a:hover {
+  color: var(--text);
+}
+
+.auth-legal span {
   color: var(--muted);
 }
 

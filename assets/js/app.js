@@ -377,7 +377,7 @@ const initTopbarNotifications = () => {
 
 const page = document.body?.dataset?.page || "";
 const isAuthPage = page === "login" || page === "register";
-const isPublicPage = page === "feed" || isAuthPage;
+const isPublicPage = page === "feed" || page === "legal" || isAuthPage;
 
 let currentUserId = null;
 
