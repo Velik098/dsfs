@@ -42,6 +42,43 @@ function safeExec(sql) {
   }
 }
 
+function isCorruptedDatabaseError(err) {
+  const msg = String(err?.message || err || "").toLowerCase();
+  return (
+    msg.includes("database disk image is malformed") ||
+    msg.includes("database schema is malformed") ||
+    msg.includes("database schema is corrupt") ||
+    msg.includes("file is not a database") ||
+    msg.includes("file is encrypted") ||
+    msg.includes("malformed")
+  );
+}
+
+function backupCorruptedDbFile() {
+  if (!fs.existsSync(DB_PATH)) return null;
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupPath = `${DB_PATH}.corrupt-${stamp}.bak`;
+  try {
+    fs.renameSync(DB_PATH, backupPath);
+    return backupPath;
+  } catch {
+    try {
+      fs.copyFileSync(DB_PATH, backupPath);
+      fs.unlinkSync(DB_PATH);
+      return backupPath;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function finalizeDbBoot() {
+  _db.exec("PRAGMA foreign_keys = ON;");
+  ensureSchema();
+  persist();
+  return _db;
+}
+
 function ensureSchema() {
   // Схема (минимальная для auth/проектов/подписок).
   // Важно: если таблица users существовала со старой схемой, делаем миграцию.
@@ -116,6 +153,8 @@ function ensureSchema() {
         role TEXT NOT NULL DEFAULT '',
         bio TEXT NOT NULL DEFAULT '',
         rating INTEGER NOT NULL DEFAULT 0,
+        avatar_data TEXT,
+        cover_data TEXT,
         created_at INTEGER NOT NULL
       );
     `);
@@ -130,7 +169,7 @@ function ensureSchema() {
       const get = (row, name) => (idx.has(name) ? row[idx.get(name)] : undefined);
 
       const insert = _db.prepare(
-        "INSERT INTO users (id, email, phone, password_hash, name, role, bio, rating, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO users (id, email, phone, password_hash, name, role, bio, rating, avatar_data, cover_data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       );
 
       try {
@@ -147,6 +186,8 @@ function ensureSchema() {
           const role = legacyCols.has("role") ? get(row, "role") : "";
           const bio = legacyCols.has("bio") ? get(row, "bio") : "";
           const rating = legacyCols.has("rating") ? Number(get(row, "rating") || 0) : 0;
+          const avatarData = legacyCols.has("avatar_data") ? get(row, "avatar_data") : null;
+          const coverData = legacyCols.has("cover_data") ? get(row, "cover_data") : null;
           const createdAt = legacyCols.has("created_at") ? Number(get(row, "created_at") || 0) : Date.now();
 
           // Если в старой таблице нет password_hash — ставим заглушку.
@@ -156,7 +197,19 @@ function ensureSchema() {
             (legacyCols.has("password") ? get(row, "password") : null) ||
             `MIGRATED_${cryptoRandomHex(16)}`;
 
-          insert.run([id, email, phone, String(pw), String(name), String(role || ""), String(bio || ""), rating, createdAt]);
+          insert.run([
+            id,
+            email,
+            phone,
+            String(pw),
+            String(name),
+            String(role || ""),
+            String(bio || ""),
+            rating,
+            avatarData == null ? null : String(avatarData),
+            coverData == null ? null : String(coverData),
+            createdAt,
+          ]);
         }
       } finally {
         insert.free();
@@ -176,6 +229,8 @@ function ensureSchema() {
       role TEXT NOT NULL DEFAULT '',
       bio TEXT NOT NULL DEFAULT '',
       rating INTEGER NOT NULL DEFAULT 0,
+      avatar_data TEXT,
+      cover_data TEXT,
       created_at INTEGER NOT NULL
     );
 
@@ -288,6 +343,22 @@ function ensureSchema() {
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS project_views (
+      viewer_id TEXT NOT NULL,
+      project_id INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (viewer_id, project_id),
+      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS post_views (
+      viewer_id TEXT NOT NULL,
+      post_id INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (viewer_id, post_id),
+      FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS reposts (
       user_id INTEGER NOT NULL,
       target_type TEXT NOT NULL,
@@ -321,6 +392,8 @@ function ensureSchema() {
   if (!userCols.has("role")) safeExec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT '';");
   if (!userCols.has("bio")) safeExec("ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT '';");
   if (!userCols.has("rating")) safeExec("ALTER TABLE users ADD COLUMN rating INTEGER NOT NULL DEFAULT 0;");
+  if (!userCols.has("avatar_data")) safeExec("ALTER TABLE users ADD COLUMN avatar_data TEXT;");
+  if (!userCols.has("cover_data")) safeExec("ALTER TABLE users ADD COLUMN cover_data TEXT;");
   if (!userCols.has("created_at")) safeExec("ALTER TABLE users ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0;");
 
   // Уникальные индексы мягче, чем констрейнты — и подходят для миграций.
@@ -343,13 +416,15 @@ function ensureSchema() {
   safeExec("CREATE INDEX IF NOT EXISTS idx_posts_user_created ON posts(user_id, created_at);");
   safeExec("CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at);");
   safeExec("CREATE INDEX IF NOT EXISTS idx_post_comments_post_created ON post_comments(post_id, created_at);");
+  safeExec("CREATE INDEX IF NOT EXISTS idx_project_views_project_created ON project_views(project_id, created_at);");
+  safeExec("CREATE INDEX IF NOT EXISTS idx_post_views_post_created ON post_views(post_id, created_at);");
   safeExec("CREATE INDEX IF NOT EXISTS idx_reposts_user_created ON reposts(user_id, created_at);");
 
-  safeExec("CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(user_id, created_at);");
-  safeExec("CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read_at);");
+safeExec("CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(user_id, created_at);");
+safeExec("CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read_at);");
 }
 
-async function openDb() {
+async function openDbLegacy() {
   if (_db) return _db;
 
   _SQL = await initSqlJs({
@@ -370,6 +445,35 @@ async function openDb() {
 
   persist();
   return _db;
+}
+
+async function openDb() {
+  if (_db) return _db;
+
+  _SQL = await initSqlJs({
+    locateFile: (file) => path.join(SQLJS_DIST, file),
+  });
+
+  try {
+    if (fs.existsSync(DB_PATH)) {
+      const fileBuf = fs.readFileSync(DB_PATH);
+      _db = new _SQL.Database(toUint8Array(fileBuf));
+    } else {
+      _db = new _SQL.Database();
+    }
+    return finalizeDbBoot();
+  } catch (err) {
+    if (!isCorruptedDatabaseError(err)) throw err;
+
+    const backupPath = backupCorruptedDbFile();
+    console.error(
+      "Corrupted SQLite database detected. Recreating a fresh db file." +
+        (backupPath ? ` Backup saved: ${path.basename(backupPath)}` : ""),
+    );
+
+    _db = new _SQL.Database();
+    return finalizeDbBoot();
+  }
 }
 
 function persist() {

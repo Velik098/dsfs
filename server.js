@@ -42,6 +42,14 @@ function normalizeProjectCategory(value) {
   return null;
 }
 
+function normalizeProfileImageData(imageData, maxLen) {
+  const raw = imageData == null ? "" : String(imageData || "").trim();
+  if (!raw) return null;
+  if (!/^data:image\/(png|jpe?g|webp);base64,/i.test(raw)) return "__BAD_IMAGE__";
+  if (raw.length > maxLen) return "__IMAGE_TOO_LARGE__";
+  return raw;
+}
+
 async function loadUserFromSession(req) {
   const token = req.cookies?.[SESSION_COOKIE];
   if (!token) return null;
@@ -55,7 +63,7 @@ async function loadUserFromSession(req) {
   if (!session) return null;
 
   const user = await db.get(
-    "SELECT id, email, phone, name, role, bio, rating, created_at AS createdAt FROM users WHERE id = ?",
+    "SELECT id, email, phone, name, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, created_at AS createdAt FROM users WHERE id = ?",
     [session.userId],
   );
   return user || null;
@@ -233,7 +241,7 @@ async function main() {
       await createSession(res, newId, true);
 
       const user = await db.get(
-        "SELECT id, email, phone, name, role, bio, rating, created_at AS createdAt FROM users WHERE id = ?",
+        "SELECT id, email, phone, name, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, created_at AS createdAt FROM users WHERE id = ?",
         [newId],
       );
       const stats = await getUserStats(newId);
@@ -257,8 +265,8 @@ async function main() {
 
       const user = await db.get(
         parsed.kind === "email"
-          ? "SELECT id, email, phone, name, role, bio, rating, password_hash AS passwordHash, created_at AS createdAt FROM users WHERE email = ?"
-          : "SELECT id, email, phone, name, role, bio, rating, password_hash AS passwordHash, created_at AS createdAt FROM users WHERE phone = ?",
+          ? "SELECT id, email, phone, name, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, password_hash AS passwordHash, created_at AS createdAt FROM users WHERE email = ?"
+          : "SELECT id, email, phone, name, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, password_hash AS passwordHash, created_at AS createdAt FROM users WHERE phone = ?",
         [parsed.value],
       );
 
@@ -303,7 +311,35 @@ async function main() {
 
     await db.run("UPDATE users SET name = ?, role = ?, bio = ? WHERE id = ?", [name, role, bio, req.user.id]);
     req.user = await db.get(
-      "SELECT id, email, phone, name, role, bio, rating, created_at AS createdAt FROM users WHERE id = ?",
+      "SELECT id, email, phone, name, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, created_at AS createdAt FROM users WHERE id = ?",
+      [req.user.id],
+    );
+    const stats = await getUserStats(req.user.id);
+    res.json({ ok: true, user: req.user, stats });
+  });
+
+  app.put("/api/me/avatar", requireAuth, async (req, res) => {
+    const next = normalizeProfileImageData(req.body?.imageData, 750_000);
+    if (next === "__BAD_IMAGE__") return jsonError(res, 400, "BAD_IMAGE");
+    if (next === "__IMAGE_TOO_LARGE__") return jsonError(res, 400, "IMAGE_TOO_LARGE");
+
+    await db.run("UPDATE users SET avatar_data = ? WHERE id = ?", [next, req.user.id]);
+    req.user = await db.get(
+      "SELECT id, email, phone, name, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, created_at AS createdAt FROM users WHERE id = ?",
+      [req.user.id],
+    );
+    const stats = await getUserStats(req.user.id);
+    res.json({ ok: true, user: req.user, stats });
+  });
+
+  app.put("/api/me/cover", requireAuth, async (req, res) => {
+    const next = normalizeProfileImageData(req.body?.imageData, 2_000_000);
+    if (next === "__BAD_IMAGE__") return jsonError(res, 400, "BAD_IMAGE");
+    if (next === "__IMAGE_TOO_LARGE__") return jsonError(res, 400, "IMAGE_TOO_LARGE");
+
+    await db.run("UPDATE users SET cover_data = ? WHERE id = ?", [next, req.user.id]);
+    req.user = await db.get(
+      "SELECT id, email, phone, name, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, created_at AS createdAt FROM users WHERE id = ?",
       [req.user.id],
     );
     const stats = await getUserStats(req.user.id);
@@ -446,7 +482,7 @@ async function main() {
     if (!Number.isFinite(id)) return jsonError(res, 400, "BAD_USER_ID");
 
     const user = await db.get(
-      "SELECT id, name, role, bio, rating, created_at AS createdAt FROM users WHERE id = ?",
+      "SELECT id, name, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, created_at AS createdAt FROM users WHERE id = ?",
       [id],
     );
     if (!user) return jsonError(res, 404, "NOT_FOUND");
@@ -479,12 +515,47 @@ async function main() {
         p.created_at AS createdAt,
         (SELECT COUNT(*) FROM likes l WHERE l.project_id = p.id) AS likesCount,
         (SELECT COUNT(*) FROM comments c WHERE c.project_id = p.id) AS commentsCount,
+        (SELECT COUNT(*) FROM reposts r3 WHERE r3.target_type = 'project' AND r3.target_id = p.id) AS repostsCount,
+        (SELECT COUNT(*) FROM project_views v WHERE v.project_id = p.id) AS viewsCount,
         EXISTS(SELECT 1 FROM likes l2 WHERE l2.project_id = p.id AND l2.user_id = ?) AS likedByMe,
         EXISTS(SELECT 1 FROM reposts r WHERE r.target_type = 'project' AND r.target_id = p.id AND r.user_id = ?) AS repostedByMe
       FROM projects p
       WHERE p.user_id = ?
       ORDER BY p.created_at DESC
       LIMIT 50
+      `,
+      [meId, meId, id],
+    );
+
+    res.json({ ok: true, items: rows });
+  });
+
+  app.get("/api/users/:id/posts", async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return jsonError(res, 400, "BAD_USER_ID");
+
+    const meId = req.user?.id ?? null;
+    const rows = await db.all(
+      `
+      SELECT
+        s.id,
+        s.body,
+        s.image_data AS imageData,
+        s.created_at AS createdAt,
+        u.id AS authorId,
+        u.name AS authorName,
+        u.role AS authorRole,
+        (SELECT COUNT(*) FROM post_likes l WHERE l.post_id = s.id) AS likesCount,
+        (SELECT COUNT(*) FROM post_comments c WHERE c.post_id = s.id) AS commentsCount,
+        (SELECT COUNT(*) FROM reposts r3 WHERE r3.target_type = 'post' AND r3.target_id = s.id) AS repostsCount,
+        (SELECT COUNT(*) FROM post_views v WHERE v.post_id = s.id) AS viewsCount,
+        EXISTS(SELECT 1 FROM post_likes l2 WHERE l2.post_id = s.id AND l2.user_id = ?) AS likedByMe,
+        EXISTS(SELECT 1 FROM reposts r WHERE r.target_type = 'post' AND r.target_id = s.id AND r.user_id = ?) AS repostedByMe
+      FROM posts s
+      JOIN users u ON u.id = s.user_id
+      WHERE s.user_id = ?
+      ORDER BY s.created_at DESC
+      LIMIT 100
       `,
       [meId, meId, id],
     );
@@ -515,6 +586,8 @@ async function main() {
         u.role AS authorRole,
         (SELECT COUNT(*) FROM likes l WHERE l.project_id = p.id) AS likesCount,
         (SELECT COUNT(*) FROM comments c WHERE c.project_id = p.id) AS commentsCount,
+        (SELECT COUNT(*) FROM reposts r3 WHERE r3.target_type = 'project' AND r3.target_id = p.id) AS repostsCount,
+        (SELECT COUNT(*) FROM project_views v WHERE v.project_id = p.id) AS viewsCount,
         EXISTS(SELECT 1 FROM likes l2 WHERE l2.project_id = p.id AND l2.user_id = ?) AS likedByMe,
         EXISTS(SELECT 1 FROM reposts r WHERE r.target_type = 'project' AND r.target_id = p.id AND r.user_id = ?) AS repostedByMe
       FROM projects p
@@ -543,6 +616,8 @@ async function main() {
         p.created_at AS createdAt,
         (SELECT COUNT(*) FROM likes l WHERE l.project_id = p.id) AS likesCount,
         (SELECT COUNT(*) FROM comments c WHERE c.project_id = p.id) AS commentsCount,
+        (SELECT COUNT(*) FROM reposts r3 WHERE r3.target_type = 'project' AND r3.target_id = p.id) AS repostsCount,
+        (SELECT COUNT(*) FROM project_views v WHERE v.project_id = p.id) AS viewsCount,
         EXISTS(SELECT 1 FROM likes l2 WHERE l2.project_id = p.id AND l2.user_id = ?) AS likedByMe,
         EXISTS(SELECT 1 FROM reposts r WHERE r.target_type = 'project' AND r.target_id = p.id AND r.user_id = ?) AS repostedByMe
       FROM projects p
@@ -704,6 +779,8 @@ async function main() {
         u.role AS authorRole,
         (SELECT COUNT(*) FROM post_likes l WHERE l.post_id = s.id) AS likesCount,
         (SELECT COUNT(*) FROM post_comments c WHERE c.post_id = s.id) AS commentsCount,
+        (SELECT COUNT(*) FROM reposts r3 WHERE r3.target_type = 'post' AND r3.target_id = s.id) AS repostsCount,
+        (SELECT COUNT(*) FROM post_views v WHERE v.post_id = s.id) AS viewsCount,
         EXISTS(SELECT 1 FROM post_likes l2 WHERE l2.post_id = s.id AND l2.user_id = ?) AS likedByMe,
         EXISTS(SELECT 1 FROM reposts r WHERE r.target_type = 'post' AND r.target_id = s.id AND r.user_id = ?) AS repostedByMe
       FROM posts s
@@ -727,6 +804,8 @@ async function main() {
         s.created_at AS createdAt,
         (SELECT COUNT(*) FROM post_likes l WHERE l.post_id = s.id) AS likesCount,
         (SELECT COUNT(*) FROM post_comments c WHERE c.post_id = s.id) AS commentsCount,
+        (SELECT COUNT(*) FROM reposts r3 WHERE r3.target_type = 'post' AND r3.target_id = s.id) AS repostsCount,
+        (SELECT COUNT(*) FROM post_views v WHERE v.post_id = s.id) AS viewsCount,
         EXISTS(SELECT 1 FROM post_likes l2 WHERE l2.post_id = s.id AND l2.user_id = ?) AS likedByMe,
         EXISTS(SELECT 1 FROM reposts r WHERE r.target_type = 'post' AND r.target_id = s.id AND r.user_id = ?) AS repostedByMe
       FROM posts s
@@ -737,6 +816,111 @@ async function main() {
       [req.user.id, req.user.id, req.user.id],
     );
     res.json({ ok: true, items: rows });
+  });
+
+  app.get("/api/my/likes", requireAuth, async (req, res) => {
+    const meId = req.user.id;
+    const limit = Math.max(1, Math.min(200, Number(req.query?.limit || 100)));
+
+    const postRows = await db.all(
+      `
+      SELECT
+        'post' AS kind,
+        p.id,
+        p.body,
+        p.image_data AS imageData,
+        p.created_at AS createdAt,
+        pl.created_at AS likedAt,
+        u.id AS authorId,
+        u.name AS authorName
+      FROM post_likes pl
+      JOIN posts p ON p.id = pl.post_id
+      JOIN users u ON u.id = p.user_id
+      WHERE pl.user_id = ?
+      ORDER BY pl.created_at DESC
+      LIMIT ?
+      `,
+      [meId, limit],
+    );
+
+    const projectRows = await db.all(
+      `
+      SELECT
+        'project' AS kind,
+        pr.id,
+        pr.title,
+        pr.body,
+        pr.budget_min AS budgetMin,
+        pr.budget_max AS budgetMax,
+        pr.due_date AS dueDate,
+        pr.category,
+        pr.tags,
+        pr.created_at AS createdAt,
+        l.created_at AS likedAt,
+        u.id AS authorId,
+        u.name AS authorName
+      FROM likes l
+      JOIN projects pr ON pr.id = l.project_id
+      JOIN users u ON u.id = pr.user_id
+      WHERE l.user_id = ?
+      ORDER BY l.created_at DESC
+      LIMIT ?
+      `,
+      [meId, limit],
+    );
+
+    const items = [...postRows, ...projectRows]
+      .map((x) => ({ ...x, likedAt: Number(x?.likedAt || 0) }))
+      .sort((a, b) => Number(b.likedAt || 0) - Number(a.likedAt || 0))
+      .slice(0, limit);
+
+    res.json({ ok: true, items });
+  });
+
+  app.post("/api/posts/:id/view", async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return jsonError(res, 400, "BAD_POST_ID");
+
+    let viewerId = String(req.headers["x-viewer-id"] || "").trim();
+    if (!viewerId && req.user?.id) viewerId = `u${req.user.id}`;
+    if (!viewerId) return jsonError(res, 400, "VIEWER_REQUIRED");
+    if (viewerId.length < 8 || viewerId.length > 120) return jsonError(res, 400, "BAD_VIEWER");
+    if (!/^[A-Za-z0-9_-]+$/.test(viewerId)) return jsonError(res, 400, "BAD_VIEWER");
+
+    const post = await db.get("SELECT id FROM posts WHERE id = ?", [id]);
+    if (!post) return jsonError(res, 404, "NOT_FOUND");
+
+    await db.run("INSERT OR IGNORE INTO post_views (viewer_id, post_id, created_at) VALUES (?, ?, ?)", [
+      viewerId,
+      id,
+      Date.now(),
+    ]);
+
+    const count = await db.get("SELECT COUNT(*) AS c FROM post_views WHERE post_id = ?", [id]);
+    res.json({ ok: true, viewsCount: Number(count?.c || 0) });
+  });
+
+  app.post("/api/projects/:id/view", async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return jsonError(res, 400, "BAD_PROJECT_ID");
+
+    let viewerId = String(req.headers["x-viewer-id"] || "").trim();
+    if (!viewerId && req.user?.id) viewerId = `u${req.user.id}`;
+    if (!viewerId) return jsonError(res, 400, "VIEWER_REQUIRED");
+    if (viewerId.length < 8 || viewerId.length > 120) return jsonError(res, 400, "BAD_VIEWER");
+    if (!/^[A-Za-z0-9_-]+$/.test(viewerId)) return jsonError(res, 400, "BAD_VIEWER");
+
+    const project = await db.get("SELECT id FROM projects WHERE id = ?", [id]);
+    if (!project) return jsonError(res, 404, "NOT_FOUND");
+
+    await db.run("INSERT OR IGNORE INTO project_views (viewer_id, project_id, created_at) VALUES (?, ?, ?)", [
+      viewerId,
+      id,
+      Date.now(),
+    ]);
+
+    const count = await db.get("SELECT COUNT(*) AS c FROM project_views WHERE project_id = ?", [id]);
+    res.json({ ok: true, viewsCount: Number(count?.c || 0) });
   });
 
   app.post("/api/posts", requireAuth, async (req, res) => {
@@ -907,7 +1091,8 @@ async function main() {
 
     if (existing) {
       await db.run("DELETE FROM reposts WHERE user_id = ? AND target_type = ? AND target_id = ?", [req.user.id, type, id]);
-      return res.json({ ok: true, reposted: false });
+      const count = await db.get("SELECT COUNT(*) AS c FROM reposts WHERE target_type = ? AND target_id = ?", [type, id]);
+      return res.json({ ok: true, reposted: false, repostsCount: Number(count?.c || 0) });
     }
 
     await db.run("INSERT INTO reposts (user_id, target_type, target_id, created_at) VALUES (?, ?, ?, ?)", [
@@ -917,7 +1102,8 @@ async function main() {
       Date.now(),
     ]);
 
-    res.json({ ok: true, reposted: true });
+    const count = await db.get("SELECT COUNT(*) AS c FROM reposts WHERE target_type = ? AND target_id = ?", [type, id]);
+    res.json({ ok: true, reposted: true, repostsCount: Number(count?.c || 0) });
   });
 
   app.get("/api/my/reposts", requireAuth, async (req, res) => {
@@ -943,6 +1129,8 @@ async function main() {
         u.role AS authorRole,
         (SELECT COUNT(*) FROM likes l WHERE l.project_id = p.id) AS likesCount,
         (SELECT COUNT(*) FROM comments c WHERE c.project_id = p.id) AS commentsCount,
+        (SELECT COUNT(*) FROM reposts r3 WHERE r3.target_type = 'project' AND r3.target_id = p.id) AS repostsCount,
+        (SELECT COUNT(*) FROM project_views v WHERE v.project_id = p.id) AS viewsCount,
         EXISTS(SELECT 1 FROM likes l2 WHERE l2.project_id = p.id AND l2.user_id = ?) AS likedByMe,
         1 AS repostedByMe
       FROM reposts r

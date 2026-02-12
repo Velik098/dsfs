@@ -53,82 +53,98 @@
     </aside>
 
     <main class="content">
-      <section class="profile-hero">
-        <div class="profile-main">
-          <div class="avatar avatar-xl" id="profileAvatar">АМ</div>
-          <div>
-            <h1 id="profileName">Артём Мельников</h1>
-            <div class="profile-role" id="profileRole">Продуктовый дизайнер · удалённо</div>
-            <p class="muted" id="profileBio">Проектирую интерфейсы, которые легко читать и приятно использовать: от первых экранов до сценариев удержания. Открыт к финтеху и сложным продуктам.</p>
-            <div class="profile-tags">
-              <span class="chip">Дизайн-системы</span>
-              <span class="chip">Исследования</span>
-              <span class="chip">Финтех</span>
-              <span class="chip">Прототипирование</span>
+      <div class="profile-column">
+        <section class="profile-card" aria-label="Профиль">
+          <div class="profile-cover" id="profileCover"></div>
+
+          <div class="profile-body">
+            <div class="profile-avatar" id="profileAvatar">АМ</div>
+
+            <div class="profile-head">
+              <div class="profile-ident">
+                <h1 class="profile-name" id="profileName">Артём Мельников</h1>
+                <div class="profile-username" id="profileUsername">@mw</div>
+              </div>
+
+              <div class="profile-head-actions">
+                <button class="profile-action-btn" type="button" data-action="edit-profile">Редактировать</button>
+                <a class="profile-icon-btn" href="settings.html" aria-label="Настройки">
+                  <i class="fa-solid fa-gear"></i>
+                </a>
+              </div>
+            </div>
+
+            <div class="profile-meta">
+              <div class="profile-role muted" id="profileRole"></div>
+              <div class="profile-bio muted" id="profileBio"></div>
+            </div>
+
+            <div class="profile-stats-line" aria-label="Статистика">
+              <div class="profile-stat">
+                <span class="profile-stat-label">Регистрация:</span>
+                <span class="profile-stat-value" id="statRegistered">—</span>
+              </div>
+              <div class="profile-stat">
+                <span class="profile-stat-label">Подписки:</span>
+                <span class="profile-stat-value" id="statFollowing">0</span>
+              </div>
+              <div class="profile-stat">
+                <span class="profile-stat-label">Подписчики:</span>
+                <span class="profile-stat-value" id="statFollowers">0</span>
+              </div>
             </div>
           </div>
-        </div>
-        <div class="profile-stats">
-          <div>
-            <div class="stat-value" id="statProjects">0</div>
-            <div class="stat-label">Проектов</div>
-          </div>
-          <div>
-            <div class="stat-value" id="statFollowers">0</div>
-            <div class="stat-label">Подписчиков</div>
-          </div>
-          <div>
-            <div class="stat-value" id="statRating">0</div>
-            <div class="stat-label">Рейтинг</div>
-          </div>
-          <button class="btn btn-secondary" type="button" data-action="edit-profile">Редактировать профиль</button>
-        </div>
-      </section>
 
-      <section class="create-form">
-        <div class="feed-header">
-          <h2>Новая запись</h2>
-          <div class="muted" id="postComposerHint"></div>
-        </div>
+          <div class="profile-tabs" role="tablist" aria-label="Разделы профиля">
+            <button class="profile-tab is-active" type="button" role="tab" aria-selected="true" data-tab="posts">Посты</button>
+            <button class="profile-tab" type="button" role="tab" aria-selected="false" data-tab="projects">Проекты</button>
+            <button class="profile-tab" type="button" role="tab" aria-selected="false" data-tab="likes">Понравившиеся</button>
+          </div>
 
-        <form id="postForm" data-post-composer="1">
-          <div class="composer">
-            <textarea name="body" rows="3" placeholder="Что у вас нового?"></textarea>
-            <div class="composer-preview" id="postImagePreview"></div>
-            <div class="composer-actions">
-              <input class="composer-file" type="file" name="image" accept="image/*" />
-              <button class="btn btn-ghost" type="button" data-action="attach">
-                <i class="fa-solid fa-paperclip"></i> Прикрепить
-              </button>
-              <button class="btn btn-primary" type="submit">Опубликовать</button>
+          <div class="profile-panels">
+            <div class="profile-panel is-active" data-tabpanel="posts" role="tabpanel">
+              <div class="profile-composer-wrap">
+                <form id="postForm" data-post-composer="1">
+                  <div class="profile-composer">
+                    <div class="avatar avatar-sm" id="composerAvatar">Я</div>
+
+                    <div class="profile-composer-main">
+                      <textarea name="body" rows="3" placeholder="Что у вас нового?"></textarea>
+
+                      <div class="composer-preview" id="postImagePreview"></div>
+
+                      <div class="profile-composer-bar">
+                        <div class="profile-composer-icons" aria-label="Действия публикации">
+                          <input class="composer-file" type="file" name="image" accept="image/*" />
+                          <button class="profile-icon-btn" type="button" aria-label="Прикрепить" data-action="attach">
+                            <i class="fa-solid fa-paperclip"></i>
+                          </button>
+                          <button class="profile-icon-btn" type="button" aria-label="Статистика" disabled>
+                            <i class="fa-solid fa-chart-simple"></i>
+                          </button>
+                        </div>
+                        <button class="profile-publish-btn" type="submit">Опубликовать</button>
+                      </div>
+
+                      <div class="profile-composer-hint muted" id="postComposerHint"></div>
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+              <div class="profile-stream" id="profilePostsList" aria-label="Посты"></div>
+            </div>
+
+            <div class="profile-panel" data-tabpanel="projects" role="tabpanel" hidden>
+              <div class="profile-stream" id="profileProjectsList" aria-label="Проекты"></div>
+            </div>
+
+            <div class="profile-panel" data-tabpanel="likes" role="tabpanel" hidden>
+              <div class="profile-stream" id="profileLikesList" aria-label="Понравившиеся"></div>
             </div>
           </div>
-        </form>
-      </section>
-
-      <section class="portfolio">
-        <div class="feed-header">
-          <h2>Мои проекты</h2>
-          <a class="btn btn-ghost" href="post.html">Управлять проектами</a>
-        </div>
-
-        <div class="feed-list" id="profileProjectsList"></div>
-      </section>
-
-      <section class="portfolio">
-        <div class="feed-header">
-          <h2>Мои посты</h2>
-        </div>
-        <div class="feed-list" id="profilePostsList"></div>
-      </section>
-
-      <section class="portfolio">
-        <div class="feed-header">
-          <h2>Репосты</h2>
-          <div class="muted">Публикации и проекты, которые вы добавили к себе.</div>
-        </div>
-        <div class="feed-list" id="profileRepostsList"></div>
-      </section>
+        </section>
+      </div>
     </main>
   </div>
 
@@ -153,6 +169,40 @@
           О себе
           <textarea name="bio" rows="4">Проектирую интерфейсы, которые легко читать и приятно использовать: от первых экранов до сценариев удержания. Открыт к финтеху и сложным продуктам.</textarea>
         </label>
+
+        <div class="edit-media">
+          <div class="edit-media-row">
+            <div class="edit-media-text">
+              <div class="edit-media-title">Фото профиля</div>
+              <div class="muted">Рекомендуемый размер: 400×400, до 700 КБ (PNG/JPEG/WebP).</div>
+            </div>
+            <div class="edit-media-controls">
+              <div class="edit-media-preview edit-media-preview--avatar" id="editAvatarPreview"></div>
+              <input class="edit-media-file" type="file" name="avatar" accept="image/*" />
+              <div class="edit-media-actions">
+                <button class="btn btn-ghost" type="button" data-action="pick-avatar"><i class="fa-solid fa-upload"></i> Загрузить</button>
+                <button class="btn btn-ghost is-danger" type="button" data-action="remove-avatar"><i class="fa-solid fa-trash"></i> Удалить</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="edit-media-row">
+            <div class="edit-media-text">
+              <div class="edit-media-title">Обложка профиля</div>
+              <div class="muted">Рекомендуемый размер: 1500×500, до 2 МБ (PNG/JPEG/WebP).</div>
+            </div>
+            <div class="edit-media-controls">
+              <div class="edit-media-preview edit-media-preview--cover" id="editCoverPreview"></div>
+              <input class="edit-media-file" type="file" name="cover" accept="image/*" />
+              <div class="edit-media-actions">
+                <button class="btn btn-ghost" type="button" data-action="pick-cover"><i class="fa-solid fa-upload"></i> Загрузить</button>
+                <button class="btn btn-ghost is-danger" type="button" data-action="remove-cover"><i class="fa-solid fa-trash"></i> Удалить</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="muted" id="editProfileMediaHint"></div>
+        </div>
 
         <div class="modal-actions">
           <button class="btn btn-ghost" type="button" data-close-modal>Отмена</button>

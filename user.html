@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Moneyway — Профиль</title>
+  <title>Moneyway - Профиль</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -13,7 +13,7 @@
 <body class="page-user" data-page="user">
   <div class="app-shell">
     <header class="topbar">
-      <a class="topbar-brand brand" href="index.html" aria-label="Moneyway — Лента">
+      <a class="topbar-brand brand" href="index.html" aria-label="Moneyway - Лента">
         <div class="brand-icon">MW</div>
         <div>
           <div class="brand-title">Moneyway</div>
@@ -24,15 +24,11 @@
       <div class="topbar-center">
         <div class="search">
           <i class="fa-solid fa-magnifying-glass"></i>
-          <input type="search" placeholder="Поиск проектов, людей, тегов" />
+          <input type="search" placeholder="Поиск людей и проектов" />
         </div>
 
         <div class="topbar-actions">
           <button class="btn btn-ghost" aria-label="Уведомления"><i class="fa-regular fa-bell"></i></button>
-          <div class="auth-actions">
-            <a class="btn btn-ghost" href="login.html">Войти</a>
-            <a class="btn btn-primary" href="register.html">Регистрация</a>
-          </div>
           <div class="profile-menu" data-profile-menu>
             <button class="avatar avatar-button" type="button" aria-label="Меню профиля" aria-haspopup="menu" aria-expanded="false" data-profile-menu-button>Я</button>
             <div class="profile-dropdown" role="menu" aria-label="Профиль" data-profile-menu-dropdown>
@@ -57,46 +53,64 @@
     </aside>
 
     <main class="content">
-      <section class="profile-hero">
-        <div class="profile-main">
-          <div class="avatar avatar-xl" id="userAvatar">?</div>
-          <div>
-            <h1 id="userName">Профиль</h1>
-            <div class="muted" id="userRole"></div>
+      <div class="profile-column">
+        <section class="profile-card" aria-label="Профиль пользователя">
+          <div class="profile-cover" id="userCover"></div>
+
+          <div class="profile-body">
+            <div class="profile-avatar" id="userAvatar">?</div>
+
+            <div class="profile-head">
+              <div class="profile-ident">
+                <h1 class="profile-name" id="userName">Профиль</h1>
+                <div class="profile-username" id="userUsername">@mw</div>
+              </div>
+
+              <div class="profile-head-actions">
+                <button class="profile-action-btn" type="button" id="userFollowBtn" data-toggle="follow">Подписаться</button>
+                <a class="profile-icon-btn" id="userMessageBtn" href="messages.html" aria-label="Написать сообщение">
+                  <i class="fa-regular fa-paper-plane"></i>
+                </a>
+              </div>
+            </div>
+
+            <div class="profile-meta">
+              <div class="profile-role muted" id="userRole"></div>
+              <div class="profile-bio muted" id="userBio">Пользователь пока ничего не рассказал о себе.</div>
+            </div>
+
+            <div class="profile-stats-line" aria-label="Статистика">
+              <div class="profile-stat">
+                <span class="profile-stat-label">Регистрация:</span>
+                <span class="profile-stat-value" id="userStatRegistered">-</span>
+              </div>
+              <div class="profile-stat">
+                <span class="profile-stat-label">Подписки:</span>
+                <span class="profile-stat-value" id="userStatFollowing">0</span>
+              </div>
+              <div class="profile-stat">
+                <span class="profile-stat-label">Подписчики:</span>
+                <span class="profile-stat-value" id="userStatFollowers">0</span>
+              </div>
+            </div>
           </div>
-        </div>
-        <div class="profile-actions">
-          <button class="btn btn-primary" type="button" id="userFollowBtn" data-toggle="follow">Подписаться</button>
-          <a class="btn btn-secondary" id="userMessageBtn" href="messages.html">Написать</a>
-        </div>
-      </section>
 
-      <section class="profile-stats">
-        <div class="stat">
-          <div class="stat-value" id="userStatProjects">0</div>
-          <div class="stat-label">Проекты</div>
-        </div>
-        <div class="stat">
-          <div class="stat-value" id="userStatFollowers">0</div>
-          <div class="stat-label">Подписчики</div>
-        </div>
-        <div class="stat">
-          <div class="stat-value" id="userStatRating">0</div>
-          <div class="stat-label">Рейтинг</div>
-        </div>
-      </section>
+          <div class="profile-tabs" role="tablist" aria-label="Разделы профиля пользователя">
+            <button class="profile-tab is-active" type="button" role="tab" aria-selected="true" data-tab="posts">Посты</button>
+            <button class="profile-tab" type="button" role="tab" aria-selected="false" data-tab="projects">Проекты</button>
+          </div>
 
-      <section class="profile-about">
-        <h2>О себе</h2>
-        <p class="muted" id="userBio">Пользователь пока ничего не рассказал о себе.</p>
-      </section>
+          <div class="profile-panels">
+            <div class="profile-panel is-active" data-tabpanel="posts" role="tabpanel">
+              <div class="profile-stream" id="userPostsList" aria-label="Посты пользователя"></div>
+            </div>
 
-      <section class="feed">
-        <div class="feed-header">
-          <h2>Проекты</h2>
-        </div>
-        <div class="feed-list" id="userProjectsList"></div>
-      </section>
+            <div class="profile-panel" data-tabpanel="projects" role="tabpanel" hidden>
+              <div class="profile-stream" id="userProjectsList" aria-label="Проекты пользователя"></div>
+            </div>
+          </div>
+        </section>
+      </div>
     </main>
   </div>
 
