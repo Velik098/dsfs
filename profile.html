@@ -109,7 +109,7 @@
                     <div class="avatar avatar-sm" id="composerAvatar">Я</div>
 
                     <div class="profile-composer-main">
-                      <textarea name="body" rows="3" placeholder="Что у вас нового?"></textarea>
+                      <textarea name="body" rows="2" placeholder="Что у вас нового?"></textarea>
 
                       <div class="composer-preview" id="postImagePreview"></div>
 
@@ -119,11 +119,36 @@
                           <button class="profile-icon-btn" type="button" aria-label="Прикрепить" data-action="attach">
                             <i class="fa-solid fa-paperclip"></i>
                           </button>
-                          <button class="profile-icon-btn" type="button" aria-label="Статистика" disabled>
-                            <i class="fa-solid fa-chart-simple"></i>
+                          <button class="profile-icon-btn" type="button" aria-label="Голосование" data-action="toggle-poll">
+                            <i class="fa-solid fa-square-poll-horizontal"></i>
                           </button>
                         </div>
                         <button class="profile-publish-btn" type="submit">Опубликовать</button>
+                      </div>
+
+                      <div class="poll-composer" data-poll-composer hidden>
+                        <label class="poll-question-label">
+                          <span>Вопрос</span>
+                          <input type="text" name="pollQuestion" maxlength="240" placeholder="О чём ваш опрос?" />
+                        </label>
+                        <div class="poll-composer-top">
+                          <label class="poll-composer-mode">
+                            <span>Тип опроса</span>
+                            <select name="pollType">
+                              <option value="regular">Обычный</option>
+                              <option value="anonymous">Анонимный</option>
+                              <option value="quiz">Викторина</option>
+                            </select>
+                          </label>
+                          <button class="btn btn-ghost poll-add-option" type="button" data-action="poll-add-option">
+                            <i class="fa-solid fa-plus"></i>
+                            <span>Добавить вариант</span>
+                          </button>
+                        </div>
+                        <div class="poll-options" data-poll-options></div>
+                        <div class="poll-quiz-note muted" data-poll-quiz-note hidden>
+                          Для викторины отметьте правильный ответ.
+                        </div>
                       </div>
 
                       <div class="profile-composer-hint muted" id="postComposerHint"></div>
@@ -160,6 +185,10 @@
         <label>
           Имя
           <input type="text" name="name" value="Артём Мельников" autocomplete="name" />
+        </label>
+        <label>
+          Юзернейм
+          <input type="text" name="username" value="" placeholder="Например: maxim" maxlength="32" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
         </label>
         <label>
           Роль

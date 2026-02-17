@@ -24,7 +24,7 @@
       <div class="topbar-center">
         <div class="search">
           <i class="fa-solid fa-magnifying-glass"></i>
-          <input type="search" placeholder="Поиск проектов, людей, тегов" />
+          <input type="search" placeholder="Поиск проектов, людей, тегов"  autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" name="site_search" />
         </div>
 
         <div class="topbar-actions">
@@ -89,14 +89,16 @@
         </div>
 
         <div class="settings-card">
+          <input type="text" name="mw_fake_username" autocomplete="username" tabindex="-1" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;" />
+          <input type="password" name="mw_fake_password" autocomplete="new-password" tabindex="-1" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;" />
           <h2>Безопасность</h2>
           <label>
             Текущий пароль
-            <input type="password" placeholder="Введите пароль" />
+            <input type="password" name="currentPassword" placeholder="Введите пароль" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" />
           </label>
           <label>
             Новый пароль
-            <input type="password" placeholder="Новый пароль" />
+            <input type="password" name="newPassword" placeholder="Новый пароль" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" />
           </label>
           <button class="btn btn-secondary">Сменить пароль</button>
         </div>

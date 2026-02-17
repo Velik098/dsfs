@@ -912,12 +912,160 @@ const observeProjectView = (cardEl, projectId, viewsEl) => {
   projectViewObserver.observe(cardEl);
 };
 
+const getPollTypeLabel = (poll) => {
+  if (!poll) return "";
+  if (poll.isQuiz) return "\u0412\u0438\u043a\u0442\u043e\u0440\u0438\u043d\u0430";
+  if (poll.isAnonymous) return "\u0410\u043d\u043e\u043d\u0438\u043c\u043d\u044b\u0439 \u043e\u043f\u0440\u043e\u0441";
+  return "\u041e\u043f\u0440\u043e\u0441";
+};
+
+const getPollPercent = (votesCount, totalVotes) => {
+  const votes = Number(votesCount || 0);
+  const total = Number(totalVotes || 0);
+  if (!Number.isFinite(votes) || !Number.isFinite(total) || total <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((votes * 100) / total)));
+};
+
+const getPollVotesText = (totalVotes) => {
+  const n = Number(totalVotes || 0);
+  if (!Number.isFinite(n) || n <= 0) return "\u041f\u043e\u043a\u0430 \u0431\u0435\u0437 \u0433\u043e\u043b\u043e\u0441\u043e\u0432";
+  return `${n} ${pluralRu(n, "\u0433\u043e\u043b\u043e\u0441", "\u0433\u043e\u043b\u043e\u0441\u0430", "\u0433\u043e\u043b\u043e\u0441\u043e\u0432")}`;
+};
+
+function renderPostPoll(post, { onError } = {}) {
+  const poll = post?.poll;
+  if (!poll || !Array.isArray(poll.options) || !poll.options.length) return null;
+
+  const postId = Number(post?.id || 0);
+  if (!Number.isFinite(postId) || postId <= 0) return null;
+
+  const wrap = document.createElement("section");
+  wrap.className = "post-poll";
+
+  const head = document.createElement("div");
+  head.className = "post-poll-head";
+
+  const type = document.createElement("span");
+  type.className = "post-poll-type";
+  type.textContent = getPollTypeLabel(poll);
+
+  const votes = document.createElement("span");
+  votes.className = "post-poll-total";
+  votes.textContent = getPollVotesText(poll.totalVotes);
+
+  head.appendChild(type);
+  head.appendChild(votes);
+  wrap.appendChild(head);
+
+  const list = document.createElement("div");
+  list.className = "post-poll-list";
+  wrap.appendChild(list);
+
+  const myVoteOptionId = poll.myVoteOptionId == null ? null : Number(poll.myVoteOptionId);
+  const canVote = !Number.isFinite(myVoteOptionId) || myVoteOptionId <= 0;
+  const totalVotes = Number(poll.totalVotes || 0);
+
+  poll.options.forEach((option) => {
+    const optionId = Number(option?.id || 0);
+    if (!Number.isFinite(optionId) || optionId <= 0) return;
+
+    const votesCount = Number(option?.votesCount || 0);
+    const percent = getPollPercent(votesCount, totalVotes);
+    const isMyVote = Boolean(option?.isMyVote);
+    const isCorrect = poll.isQuiz && poll.correctOptionId != null && Number(poll.correctOptionId) === optionId;
+    const isWrong = poll.isQuiz && poll.correctOptionId != null && isMyVote && !isCorrect;
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "post-poll-option";
+    if (canVote) btn.classList.add("is-votable");
+    if (isMyVote) btn.classList.add("is-selected");
+    if (isCorrect) btn.classList.add("is-correct");
+    if (isWrong) btn.classList.add("is-wrong");
+    btn.dataset.postId = String(postId);
+    btn.dataset.optionId = String(optionId);
+    btn.disabled = !canVote;
+
+    const bar = document.createElement("span");
+    bar.className = "post-poll-option-bar";
+    const fill = document.createElement("span");
+    fill.className = "post-poll-option-fill";
+    fill.style.width = `${percent}%`;
+    bar.appendChild(fill);
+    btn.appendChild(bar);
+
+    const content = document.createElement("span");
+    content.className = "post-poll-option-content";
+
+    const label = document.createElement("span");
+    label.className = "post-poll-option-label";
+    label.textContent = String(option?.label || "");
+
+    const meta = document.createElement("span");
+    meta.className = "post-poll-option-meta";
+    if (totalVotes > 0 || isMyVote) {
+      meta.textContent = `${percent}% - ${votesCount}`;
+    } else {
+      meta.textContent = "";
+    }
+
+    content.appendChild(label);
+    content.appendChild(meta);
+    btn.appendChild(content);
+    list.appendChild(btn);
+
+    if (!canVote) return;
+
+    btn.addEventListener("click", async () => {
+      if (!document.body.classList.contains("is-authed")) {
+        window.location.href = "login.html";
+        return;
+      }
+      if (btn.dataset.busy === "1") return;
+
+      btn.dataset.busy = "1";
+      const all = Array.from(list.querySelectorAll(".post-poll-option"));
+      all.forEach((x) => {
+        x.disabled = true;
+      });
+
+      try {
+        const result = await apiFetch(`/api/posts/${postId}/poll-vote`, {
+          method: "POST",
+          body: { optionId },
+        });
+
+        if (!result.ok) {
+          if (result.status === 401) {
+            window.location.href = "login.html";
+            return;
+          }
+          if (typeof onError === "function") onError("\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0433\u043e\u043b\u043e\u0441. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0435\u0449\u0451 \u0440\u0430\u0437.");
+          all.forEach((x) => {
+            x.disabled = false;
+          });
+          return;
+        }
+
+        post.poll = result.data?.poll || null;
+        const next = renderPostPoll(post, { onError });
+        if (next) wrap.replaceWith(next);
+        else wrap.remove();
+      } finally {
+        btn.dataset.busy = "0";
+      }
+    });
+  });
+
+  return wrap;
+}
+
 function renderPostsInto(listEl, items) {
   if (!listEl) return;
   listEl.innerHTML = "";
 
   if (!items.length) {
-    listEl.innerHTML = `<div class="muted">Пока нет постов.</div>`;
+    listEl.innerHTML = `<div class="profile-empty">Пока нет постов.</div>`;
     return;
   }
 
@@ -969,6 +1117,9 @@ function renderPostsInto(listEl, items) {
       media.appendChild(img);
       card.appendChild(media);
     }
+
+    const pollBlock = renderPostPoll(p);
+    if (pollBlock) card.appendChild(pollBlock);
 
     const footer = document.createElement("div");
     footer.className = "post-footer";
@@ -1045,7 +1196,19 @@ document.querySelectorAll("form[data-post-composer='1']").forEach((form) => {
   const preview = form.querySelector(".composer-preview") || document.getElementById("postImagePreview");
   const attachBtn = form.querySelector("[data-action='attach']");
 
+  const pollWrap = form.querySelector("[data-poll-composer]");
+  const pollToggleBtn = form.querySelector("[data-action='toggle-poll']");
+  const pollAddBtn = form.querySelector("[data-action='poll-add-option']");
+  const pollOptionsEl = form.querySelector("[data-poll-options]");
+  const pollQuizNote = form.querySelector("[data-poll-quiz-note]");
+  const pollTypeSelect = form.elements?.pollType;
+  const pollQuestionInput = form.elements?.pollQuestion;
+
   let imageData = null;
+  let pollEnabled = false;
+  let pollOptions = ["", ""];
+  let pollCorrectIndex = 0;
+  const pollCorrectName = `poll-correct-${Math.random().toString(36).slice(2, 10)}`;
 
   const setHint = (text) => {
     if (!hint) return;
@@ -1061,13 +1224,13 @@ document.querySelectorAll("form[data-post-composer='1']").forEach((form) => {
     box.className = "composer-preview-box";
 
     const img = document.createElement("img");
-    img.alt = "Предпросмотр";
+    img.alt = "\u041f\u0440\u0435\u0434\u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440";
     img.src = dataUrl;
 
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "composer-remove";
-    remove.setAttribute("aria-label", "Убрать изображение");
+    remove.setAttribute("aria-label", "\u0423\u0431\u0440\u0430\u0442\u044c \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435");
     remove.innerHTML = '<i class="fa-solid fa-xmark"></i>';
     remove.addEventListener("click", () => {
       imageData = null;
@@ -1083,6 +1246,124 @@ document.querySelectorAll("form[data-post-composer='1']").forEach((form) => {
     box.appendChild(remove);
     preview.appendChild(box);
   };
+
+  const normalizePollType = (raw) => {
+    const x = String(raw || "regular").trim().toLowerCase();
+    if (x === "anonymous" || x === "anon") return "anonymous";
+    if (x === "quiz") return "quiz";
+    return "regular";
+  };
+
+  const renderPollOptions = () => {
+    if (!pollOptionsEl) return;
+    pollOptionsEl.innerHTML = "";
+
+    const pollType = normalizePollType(pollTypeSelect?.value);
+    if (pollQuizNote) pollQuizNote.hidden = pollType !== "quiz";
+
+    pollOptions.forEach((value, index) => {
+      const row = document.createElement("div");
+      row.className = "poll-option-row";
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "poll-option-input";
+      input.placeholder = `\u0412\u0430\u0440\u0438\u0430\u043d\u0442 ${index + 1}`;
+      input.maxLength = 120;
+      input.value = String(value || "");
+      input.addEventListener("input", () => {
+        pollOptions[index] = input.value;
+      });
+
+      const right = document.createElement("div");
+      right.className = "poll-option-actions";
+
+      if (pollType === "quiz") {
+        const label = document.createElement("label");
+        label.className = "poll-correct-mark";
+
+        const radio = document.createElement("input");
+        radio.type = "radio";
+        radio.name = pollCorrectName;
+        radio.checked = index === pollCorrectIndex;
+        radio.addEventListener("change", () => {
+          if (radio.checked) pollCorrectIndex = index;
+        });
+
+        const textEl = document.createElement("span");
+        textEl.textContent = "\u0412\u0435\u0440\u043d\u044b\u0439";
+
+        label.appendChild(radio);
+        label.appendChild(textEl);
+        right.appendChild(label);
+      }
+
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "poll-remove-option";
+      remove.setAttribute("aria-label", "\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u0432\u0430\u0440\u0438\u0430\u043d\u0442");
+      remove.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+      remove.disabled = pollOptions.length <= 2;
+      remove.addEventListener("click", () => {
+        if (pollOptions.length <= 2) return;
+        pollOptions.splice(index, 1);
+        if (pollCorrectIndex >= pollOptions.length) pollCorrectIndex = pollOptions.length - 1;
+        if (pollCorrectIndex < 0) pollCorrectIndex = 0;
+        renderPollOptions();
+      });
+
+      right.appendChild(remove);
+      row.appendChild(input);
+      row.appendChild(right);
+      pollOptionsEl.appendChild(row);
+    });
+
+    if (pollAddBtn) pollAddBtn.disabled = pollOptions.length >= 8;
+  };
+
+  const resetPollState = () => {
+    pollEnabled = false;
+    pollOptions = ["", ""];
+    pollCorrectIndex = 0;
+    if (pollTypeSelect) pollTypeSelect.value = "regular";
+    if (pollQuestionInput) pollQuestionInput.value = "";
+    if (pollWrap) {
+      pollWrap.hidden = true;
+      pollWrap.classList.remove("is-open");
+    }
+    if (pollToggleBtn) pollToggleBtn.classList.remove("is-active");
+    renderPollOptions();
+  };
+
+  if (pollToggleBtn) {
+    pollToggleBtn.addEventListener("click", () => {
+      pollEnabled = !pollEnabled;
+      if (pollWrap) {
+        pollWrap.hidden = !pollEnabled;
+        pollWrap.classList.toggle("is-open", pollEnabled);
+      }
+      pollToggleBtn.classList.toggle("is-active", pollEnabled);
+      if (pollEnabled) renderPollOptions();
+      setHint("");
+    });
+  }
+
+  if (pollAddBtn) {
+    pollAddBtn.addEventListener("click", () => {
+      if (pollOptions.length >= 8) return;
+      pollOptions.push("");
+      renderPollOptions();
+    });
+  }
+
+  if (pollTypeSelect) {
+    pollTypeSelect.addEventListener("change", () => {
+      renderPollOptions();
+    });
+  }
+
+  // По умолчанию блок опроса всегда скрыт до явного клика по кнопке.
+  resetPollState();
 
   if (attachBtn && imageInput) {
     attachBtn.addEventListener("click", () => imageInput.click());
@@ -1104,7 +1385,7 @@ document.querySelectorAll("form[data-post-composer='1']").forEach((form) => {
       if (file.size > 1_200_000) {
         imageData = null;
         setPreview(null);
-        setHint("Картинка слишком большая. Выберите файл до 1.2 МБ.");
+        setHint("\u041a\u0430\u0440\u0442\u0438\u043d\u043a\u0430 \u0441\u043b\u0438\u0448\u043a\u043e\u043c \u0431\u043e\u043b\u044c\u0448\u0430\u044f. \u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0444\u0430\u0439\u043b \u0434\u043e 1.2 \u041c\u0411.");
         return;
       }
 
@@ -1131,12 +1412,67 @@ document.querySelectorAll("form[data-post-composer='1']").forEach((form) => {
     }
 
     const body = textarea?.value?.trim?.() || "";
-    if (!body && !imageData) return;
+    const pollQuestion = pollQuestionInput?.value?.trim?.() || "";
 
-    const result = await apiFetch("/api/posts", { method: "POST", body: { body, imageData } });
+    let pollPayload = null;
+    if (pollEnabled) {
+      if (!pollQuestion) {
+        setHint("Введите вопрос опроса.");
+        return;
+      }
+
+      const pollType = normalizePollType(pollTypeSelect?.value);
+      const options = pollOptions.map((x) => String(x || "").trim());
+
+      if (options.some((x) => !x)) {
+        setHint("\u0417\u0430\u043f\u043e\u043b\u043d\u0438\u0442\u0435 \u0432\u0441\u0435 \u0432\u0430\u0440\u0438\u0430\u043d\u0442\u044b \u043e\u043f\u0440\u043e\u0441\u0430.");
+        return;
+      }
+
+      if (options.length < 2) {
+        setHint("\u0414\u043e\u0431\u0430\u0432\u044c\u0442\u0435 \u043c\u0438\u043d\u0438\u043c\u0443\u043c \u0434\u0432\u0430 \u0432\u0430\u0440\u0438\u0430\u043d\u0442\u0430.");
+        return;
+      }
+
+      const uniq = new Set(options.map((x) => x.toLowerCase()));
+      if (uniq.size !== options.length) {
+        setHint("\u0412\u0430\u0440\u0438\u0430\u043d\u0442\u044b \u0434\u043e\u043b\u0436\u043d\u044b \u0431\u044b\u0442\u044c \u0440\u0430\u0437\u043d\u044b\u043c\u0438.");
+        return;
+      }
+
+      pollPayload = {
+        type: pollType,
+        options,
+      };
+
+      if (pollType === "quiz") {
+        if (!Number.isInteger(pollCorrectIndex) || pollCorrectIndex < 0 || pollCorrectIndex >= options.length) {
+          setHint("\u0414\u043b\u044f \u0432\u0438\u043a\u0442\u043e\u0440\u0438\u043d\u044b \u043e\u0442\u043c\u0435\u0442\u044c\u0442\u0435 \u043f\u0440\u0430\u0432\u0438\u043b\u044c\u043d\u044b\u0439 \u043e\u0442\u0432\u0435\u0442.");
+          return;
+        }
+        pollPayload.correctOptionIndex = pollCorrectIndex;
+      }
+    }
+
+    const finalBody = pollEnabled ? (body || pollQuestion) : body;
+    if (!finalBody && !imageData && !pollPayload) return;
+
+    const result = await apiFetch("/api/posts", { method: "POST", body: { body: finalBody, imageData, poll: pollPayload } });
     if (!result.ok) {
       if (result.status === 401) window.location.href = "login.html";
-      setHint("Не удалось опубликовать запись. Попробуйте ещё раз.");
+      if (result.data?.error === "POLL_QUESTION_REQUIRED") {
+        setHint("Введите вопрос опроса.");
+        return;
+      }
+      if (result.data?.error === "BAD_POLL_OPTIONS") {
+        setHint("\u0412 \u043e\u043f\u0440\u043e\u0441\u0435 \u0434\u043e\u043b\u0436\u043d\u043e \u0431\u044b\u0442\u044c \u043e\u0442 2 \u0434\u043e 8 \u0432\u0430\u0440\u0438\u0430\u043d\u0442\u043e\u0432.");
+        return;
+      }
+      if (result.data?.error === "BAD_POLL_QUIZ_ANSWER") {
+        setHint("\u0423\u043a\u0430\u0436\u0438\u0442\u0435 \u043f\u0440\u0430\u0432\u0438\u043b\u044c\u043d\u044b\u0439 \u043e\u0442\u0432\u0435\u0442 \u0434\u043b\u044f \u0432\u0438\u043a\u0442\u043e\u0440\u0438\u043d\u044b.");
+        return;
+      }
+      setHint("\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043e\u043f\u0443\u0431\u043b\u0438\u043a\u043e\u0432\u0430\u0442\u044c \u0437\u0430\u043f\u0438\u0441\u044c. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0435\u0449\u0451 \u0440\u0430\u0437.");
       return;
     }
 
@@ -1147,15 +1483,14 @@ document.querySelectorAll("form[data-post-composer='1']").forEach((form) => {
     }
     imageData = null;
     setPreview(null);
-    setHint("Опубликовано.");
+    resetPollState();
+    setHint("\u041e\u043f\u0443\u0431\u043b\u0438\u043a\u043e\u0432\u0430\u043d\u043e.");
 
-    // Обновим видимые ленты
     const list1 = document.getElementById("homePostsList");
     if (list1) await loadPostsInto(list1, { limit: 20 });
 
     const list2 = document.getElementById("profilePostsList");
     if (list2) {
-      // Профильная секция "Мои посты"
       try {
         if (typeof window.__mwLoadMyPosts === "function") await window.__mwLoadMyPosts();
       } catch {
@@ -1764,7 +2099,7 @@ if (userProjectsList) {
     const followersEl = document.getElementById("userStatFollowers");
 
     if (nameEl) nameEl.textContent = name;
-    if (usernameEl) usernameEl.textContent = `@mw${userId}`;
+    if (usernameEl) usernameEl.textContent = user.username ? `@${String(user.username).replace(/^@+/, "")}` : `@mw${userId}`;
     if (roleEl) roleEl.textContent = role;
     if (bioEl) bioEl.textContent = bio || "Пользователь пока ничего не рассказал о себе.";
     setAvatarVisual(avatarEl, name, user.avatarData, "?");
@@ -2038,6 +2373,10 @@ if (profilePostsList) {
         media.appendChild(img);
         card.appendChild(media);
       }
+
+      
+      const pollBlock = renderPostPoll(p, { onError: setProfileHint });
+      if (pollBlock) card.appendChild(pollBlock);
 
       const footer = document.createElement("div");
       footer.className = "post-footer";
@@ -3536,6 +3875,7 @@ if (editProfileModal && editProfileButtons.length) {
       ...prev,
       id: user.id,
       name: user.name,
+      username: user.username || null,
       role: user.role,
       bio: user.bio,
       avatarData: user.avatarData || null,
@@ -3552,6 +3892,7 @@ if (editProfileModal && editProfileButtons.length) {
     const stored = getStoredProfile();
     if (form && stored) {
       if (stored.name != null) form.elements.name.value = stored.name;
+      if (form.elements.username) form.elements.username.value = stored.username || "";
       if (stored.role != null) form.elements.role.value = stored.role;
       if (stored.bio != null) form.elements.bio.value = stored.bio;
     }
@@ -3718,6 +4059,7 @@ if (editProfileModal && editProfileButtons.length) {
       event.preventDefault();
 
       const name = form.elements?.name?.value?.trim?.() || "";
+      const username = form.elements?.username?.value?.trim?.() || "";
       const role = form.elements?.role?.value?.trim?.() || "";
       const bio = form.elements?.bio?.value?.trim?.() || "";
 
@@ -3725,11 +4067,15 @@ if (editProfileModal && editProfileButtons.length) {
 
       const result = await apiFetch("/api/me", {
         method: "PUT",
-        body: { name, role, bio },
+        body: { name, username, role, bio },
       });
 
       if (!result.ok) {
         if (result.status === 401) window.location.href = "login.html";
+        const code = result.data?.error;
+        if (code === "USERNAME_TAKEN") setMediaHint("Этот юзернейм уже занят.");
+        else if (code === "USERNAME_INVALID") setMediaHint("Юзернейм: 3-32 символа, только латиница, цифры, точка и подчёркивание.");
+        else setMediaHint("Не удалось сохранить профиль.");
         return;
       }
 
@@ -3738,6 +4084,7 @@ if (editProfileModal && editProfileButtons.length) {
         const profile = {
           id: user.id,
           name: user.name,
+          username: user.username || null,
           role: user.role,
           bio: user.bio,
           avatarData: user.avatarData || null,

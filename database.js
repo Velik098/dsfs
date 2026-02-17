@@ -150,6 +150,7 @@ function ensureSchema() {
         phone TEXT,
         password_hash TEXT NOT NULL,
         name TEXT NOT NULL,
+        username TEXT,
         role TEXT NOT NULL DEFAULT '',
         bio TEXT NOT NULL DEFAULT '',
         rating INTEGER NOT NULL DEFAULT 0,
@@ -169,7 +170,7 @@ function ensureSchema() {
       const get = (row, name) => (idx.has(name) ? row[idx.get(name)] : undefined);
 
       const insert = _db.prepare(
-        "INSERT INTO users (id, email, phone, password_hash, name, role, bio, rating, avatar_data, cover_data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO users (id, email, phone, password_hash, name, username, role, bio, rating, avatar_data, cover_data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       );
 
       try {
@@ -183,6 +184,7 @@ function ensureSchema() {
             (legacyCols.has("full_name") ? get(row, "full_name") : null) ||
             "Пользователь";
 
+          const username = legacyCols.has("username") ? get(row, "username") : null;
           const role = legacyCols.has("role") ? get(row, "role") : "";
           const bio = legacyCols.has("bio") ? get(row, "bio") : "";
           const rating = legacyCols.has("rating") ? Number(get(row, "rating") || 0) : 0;
@@ -203,6 +205,7 @@ function ensureSchema() {
             phone,
             String(pw),
             String(name),
+            username == null ? null : String(username),
             String(role || ""),
             String(bio || ""),
             rating,
@@ -226,6 +229,7 @@ function ensureSchema() {
       phone TEXT UNIQUE,
       password_hash TEXT NOT NULL,
       name TEXT NOT NULL,
+      username TEXT,
       role TEXT NOT NULL DEFAULT '',
       bio TEXT NOT NULL DEFAULT '',
       rating INTEGER NOT NULL DEFAULT 0,
@@ -320,7 +324,29 @@ function ensureSchema() {
       user_id INTEGER NOT NULL,
       body TEXT NOT NULL,
       image_data TEXT,
+      poll_type TEXT,
+      poll_correct_option_id INTEGER,
       created_at INTEGER NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS poll_options (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      post_id INTEGER NOT NULL,
+      label TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS poll_votes (
+      post_id INTEGER NOT NULL,
+      option_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (post_id, user_id),
+      FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE,
+      FOREIGN KEY(option_id) REFERENCES poll_options(id) ON DELETE CASCADE,
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
@@ -389,6 +415,7 @@ function ensureSchema() {
   // Миграции (если таблицы уже существовали со старой схемой).
   const userCols = getTableColumns("users");
   if (!userCols.has("phone")) safeExec("ALTER TABLE users ADD COLUMN phone TEXT;");
+  if (!userCols.has("username")) safeExec("ALTER TABLE users ADD COLUMN username TEXT;");
   if (!userCols.has("role")) safeExec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT '';");
   if (!userCols.has("bio")) safeExec("ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT '';");
   if (!userCols.has("rating")) safeExec("ALTER TABLE users ADD COLUMN rating INTEGER NOT NULL DEFAULT 0;");
@@ -400,10 +427,15 @@ function ensureSchema() {
   // Если в БД уже есть дубли, создание индекса может упасть — это ок для MVP.
   safeExec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL;");
   safeExec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone ON users(phone) WHERE phone IS NOT NULL;");
+  safeExec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username IS NOT NULL AND LENGTH(TRIM(username)) > 0;");
 
   const projectCols = getTableColumns("projects");
   if (!projectCols.has("due_date")) safeExec("ALTER TABLE projects ADD COLUMN due_date TEXT;");
   if (!projectCols.has("category")) safeExec("ALTER TABLE projects ADD COLUMN category TEXT;");
+
+  const postCols = getTableColumns("posts");
+  if (!postCols.has("poll_type")) safeExec("ALTER TABLE posts ADD COLUMN poll_type TEXT;");
+  if (!postCols.has("poll_correct_option_id")) safeExec("ALTER TABLE posts ADD COLUMN poll_correct_option_id INTEGER;");
 
   const notifCols = getTableColumns("notifications");
   if (!notifCols.has("post_id")) safeExec("ALTER TABLE notifications ADD COLUMN post_id INTEGER;");
@@ -415,13 +447,22 @@ function ensureSchema() {
 
   safeExec("CREATE INDEX IF NOT EXISTS idx_posts_user_created ON posts(user_id, created_at);");
   safeExec("CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at);");
+  safeExec("CREATE INDEX IF NOT EXISTS idx_poll_options_post_position ON poll_options(post_id, position);");
+  safeExec("CREATE INDEX IF NOT EXISTS idx_poll_votes_post_option ON poll_votes(post_id, option_id);");
   safeExec("CREATE INDEX IF NOT EXISTS idx_post_comments_post_created ON post_comments(post_id, created_at);");
   safeExec("CREATE INDEX IF NOT EXISTS idx_project_views_project_created ON project_views(project_id, created_at);");
   safeExec("CREATE INDEX IF NOT EXISTS idx_post_views_post_created ON post_views(post_id, created_at);");
   safeExec("CREATE INDEX IF NOT EXISTS idx_reposts_user_created ON reposts(user_id, created_at);");
 
-safeExec("CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(user_id, created_at);");
-safeExec("CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read_at);");
+  safeExec("CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(user_id, created_at);");
+  safeExec("CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read_at);");
+
+  // Защита от старых неконсистентных записей: пост-опрос без вариантов.
+  safeExec(`
+    DELETE FROM posts
+    WHERE poll_type IS NOT NULL
+      AND id NOT IN (SELECT DISTINCT post_id FROM poll_options)
+  `);
 }
 
 async function openDbLegacy() {

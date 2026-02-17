@@ -8,9 +8,21 @@ const auth = require("./auth");
 
 const PORT = Number(process.env.PORT || 3000);
 const SESSION_COOKIE = "mw_session";
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 дней
-const SESSION_TTL_REMEMBER_MS = 30 * 24 * 60 * 60 * 1000; // 30 дней
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 РґРЅРµР№
+const SESSION_TTL_REMEMBER_MS = 30 * 24 * 60 * 60 * 1000; // 30 РґРЅРµР№
 
+
+let localRowIdTs = 0;
+let localRowIdSeq = 0;
+function allocateRowId() {
+  const now = Date.now();
+  if (now === localRowIdTs) localRowIdSeq = (localRowIdSeq + 1) % 1000;
+  else {
+    localRowIdTs = now;
+    localRowIdSeq = 0;
+  }
+  return now * 1000 + localRowIdSeq;
+}
 function jsonError(res, status, message) {
   res.status(status).json({ ok: false, error: message });
 }
@@ -30,16 +42,136 @@ function normalizeProjectCategory(value) {
   const raw = String(value || "").trim();
   if (!raw) return null;
 
-  // Держим категории фиксированными, чтобы фильтры работали предсказуемо.
+  // Р”РµСЂР¶РёРј РєР°С‚РµРіРѕСЂРёРё С„РёРєСЃРёСЂРѕРІР°РЅРЅС‹РјРё, С‡С‚РѕР±С‹ С„РёР»СЊС‚СЂС‹ СЂР°Р±РѕС‚Р°Р»Рё РїСЂРµРґСЃРєР°Р·СѓРµРјРѕ.
   const key = raw.toLowerCase();
-  if (key === "дизайн") return "Дизайн";
-  if (key === "интерфейсы") return "Дизайн";
-  if (key === "анимация") return "Дизайн";
-  if (key === "веб") return "Веб";
-  if (key === "бренд") return "Бренд";
-  if (key === "брендинг") return "Бренд";
-  if (key === "продукт") return "Продукт";
+  if (key === "РґРёР·Р°Р№РЅ") return "Р”РёР·Р°Р№РЅ";
+  if (key === "РёРЅС‚РµСЂС„РµР№СЃС‹") return "Р”РёР·Р°Р№РЅ";
+  if (key === "Р°РЅРёРјР°С†РёСЏ") return "Р”РёР·Р°Р№РЅ";
+  if (key === "РІРµР±") return "Р’РµР±";
+  if (key === "Р±СЂРµРЅРґ") return "Р‘СЂРµРЅРґ";
+  if (key === "Р±СЂРµРЅРґРёРЅРі") return "Р‘СЂРµРЅРґ";
+  if (key === "РїСЂРѕРґСѓРєС‚") return "РџСЂРѕРґСѓРєС‚";
   return null;
+}
+
+
+function normalizeUsername(value) {
+  const raw = String(value == null ? "" : value).trim();
+  if (!raw) return { value: null, error: null };
+
+  const normalized = raw.startsWith("@") ? raw.slice(1) : raw;
+  const username = normalized.toLowerCase();
+
+  if (username.length < 3 || username.length > 32) {
+    return { value: null, error: "USERNAME_INVALID" };
+  }
+
+  if (!/^[a-z0-9._]+$/.test(username)) {
+    return { value: null, error: "USERNAME_INVALID" };
+  }
+
+  if (/^[._]|[._]$/.test(username) || username.includes("..") || username.includes("__") || username.includes("._") || username.includes("_.")) {
+    return { value: null, error: "USERNAME_INVALID" };
+  }
+
+  return { value: username, error: null };
+}
+
+function normalizePollInput(rawPoll) {
+  if (rawPoll == null) return { poll: null, error: null };
+  if (typeof rawPoll !== "object") return { poll: null, error: "BAD_POLL" };
+
+  const rawType = String(rawPoll.type || "regular").trim().toLowerCase();
+  let type = "regular";
+  if (rawType === "anonymous" || rawType === "anon") type = "anonymous";
+  else if (rawType === "quiz") type = "quiz";
+
+  const rawOptions = Array.isArray(rawPoll.options) ? rawPoll.options : [];
+  const options = rawOptions
+    .map((x) => String(x || "").trim())
+    .filter((x) => x.length > 0);
+
+  if (options.length < 2 || options.length > 8) return { poll: null, error: "BAD_POLL_OPTIONS" };
+  if (options.some((x) => x.length > 120)) return { poll: null, error: "BAD_POLL_OPTION_TEXT" };
+
+  const lowered = new Set();
+  for (const opt of options) {
+    const k = opt.toLowerCase();
+    if (lowered.has(k)) return { poll: null, error: "BAD_POLL_OPTIONS_DUP" };
+    lowered.add(k);
+  }
+
+  let correctOptionIndex = null;
+  if (type === "quiz") {
+    const idx = Number(rawPoll.correctOptionIndex);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= options.length) return { poll: null, error: "BAD_POLL_QUIZ_ANSWER" };
+    correctOptionIndex = idx;
+  }
+
+  return { poll: { type, options, correctOptionIndex }, error: null };
+}
+
+async function fetchPollForPost(post, viewerUserId, forceRevealCorrect = false) {
+  const postId = Number(post?.id || 0);
+  const pollType = String(post?.pollType || "").trim().toLowerCase();
+  if (!Number.isFinite(postId) || postId <= 0 || !pollType) return null;
+
+  const options = await db.all(
+    `
+    SELECT
+      o.id,
+      o.label,
+      o.position,
+      (SELECT COUNT(*) FROM poll_votes v WHERE v.option_id = o.id) AS votesCount
+    FROM poll_options o
+    WHERE o.post_id = ?
+    ORDER BY o.position ASC, o.id ASC
+    `,
+    [postId],
+  );
+
+  if (!Array.isArray(options) || !options.length) return null;
+
+  const viewerId = Number(viewerUserId || 0);
+  let myVoteOptionId = null;
+  if (Number.isFinite(viewerId) && viewerId > 0) {
+    const vote = await db.get("SELECT option_id AS optionId FROM poll_votes WHERE post_id = ? AND user_id = ?", [postId, viewerId]);
+    if (vote?.optionId != null) myVoteOptionId = Number(vote.optionId) || null;
+  }
+
+  const totalVotes = options.reduce((acc, x) => acc + Number(x?.votesCount || 0), 0);
+  const correctOptionId = post?.pollCorrectOptionId == null ? null : Number(post.pollCorrectOptionId || 0) || null;
+
+  const authorId = Number(post?.authorId || post?.postUserId || post?.userId || 0);
+  const revealCorrect =
+    pollType === "quiz" &&
+    (forceRevealCorrect || myVoteOptionId != null || (Number.isFinite(viewerId) && viewerId > 0 && viewerId === authorId));
+
+  return {
+    type: pollType,
+    isAnonymous: pollType === "anonymous",
+    isQuiz: pollType === "quiz",
+    totalVotes: Number(totalVotes || 0),
+    myVoteOptionId,
+    correctOptionId: revealCorrect ? correctOptionId : null,
+    options: options.map((x) => ({
+      id: Number(x.id),
+      label: String(x.label || ""),
+      votesCount: Number(x.votesCount || 0),
+      isMyVote: myVoteOptionId != null && Number(x.id) === Number(myVoteOptionId),
+    })),
+  };
+}
+
+async function enrichPostsWithPoll(rows, viewerUserId, opts = {}) {
+  const list = Array.isArray(rows) ? rows : [];
+  const forceRevealCorrect = Boolean(opts?.forceRevealCorrect);
+
+  for (const item of list) {
+    item.poll = await fetchPollForPost(item, viewerUserId, forceRevealCorrect);
+  }
+
+  return list;
 }
 
 function normalizeProfileImageData(imageData, maxLen) {
@@ -63,7 +195,7 @@ async function loadUserFromSession(req) {
   if (!session) return null;
 
   const user = await db.get(
-    "SELECT id, email, phone, name, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, created_at AS createdAt FROM users WHERE id = ?",
+    "SELECT id, email, phone, name, username, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, created_at AS createdAt FROM users WHERE id = ?",
     [session.userId],
   );
   return user || null;
@@ -161,9 +293,9 @@ async function getUnreadNotificationCount(userId) {
 }
 
 async function getNextUserId() {
-  // Если в БД уже есть демо-данные (projects/follows/likes), но таблица users пустая/сброшена,
-  // новый пользователь может получить id=1 и "унаследовать" чужие проекты/подписки.
-  // Чтобы новый аккаунт всегда начинался с нуля, выбираем id выше любого уже используемого.
+  // Р•СЃР»Рё РІ Р‘Р” СѓР¶Рµ РµСЃС‚СЊ РґРµРјРѕ-РґР°РЅРЅС‹Рµ (projects/follows/likes), РЅРѕ С‚Р°Р±Р»РёС†Р° users РїСѓСЃС‚Р°СЏ/СЃР±СЂРѕС€РµРЅР°,
+  // РЅРѕРІС‹Р№ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РјРѕР¶РµС‚ РїРѕР»СѓС‡РёС‚СЊ id=1 Рё "СѓРЅР°СЃР»РµРґРѕРІР°С‚СЊ" С‡СѓР¶РёРµ РїСЂРѕРµРєС‚С‹/РїРѕРґРїРёСЃРєРё.
+  // Р§С‚РѕР±С‹ РЅРѕРІС‹Р№ Р°РєРєР°СѓРЅС‚ РІСЃРµРіРґР° РЅР°С‡РёРЅР°Р»СЃСЏ СЃ РЅСѓР»СЏ, РІС‹Р±РёСЂР°РµРј id РІС‹С€Рµ Р»СЋР±РѕРіРѕ СѓР¶Рµ РёСЃРїРѕР»СЊР·СѓРµРјРѕРіРѕ.
   const a = await db.get("SELECT COALESCE(MAX(id), 0) AS m FROM users");
   const b = await db.get("SELECT COALESCE(MAX(user_id), 0) AS m FROM projects");
   const c1 = await db.get("SELECT COALESCE(MAX(follower_id), 0) AS m FROM follows");
@@ -186,17 +318,17 @@ async function main() {
 
   const app = express();
 
-  // Для постов с картинками (data URL) нужен больший лимит.
+  // Р”Р»СЏ РїРѕСЃС‚РѕРІ СЃ РєР°СЂС‚РёРЅРєР°РјРё (data URL) РЅСѓР¶РµРЅ Р±РѕР»СЊС€РёР№ Р»РёРјРёС‚.
   app.use(express.json({ limit: "3mb" }));
   app.use(cookieParser());
 
-  // Авторизация на каждом запросе (недорого для MVP).
+  // РђРІС‚РѕСЂРёР·Р°С†РёСЏ РЅР° РєР°Р¶РґРѕРј Р·Р°РїСЂРѕСЃРµ (РЅРµРґРѕСЂРѕРіРѕ РґР»СЏ MVP).
   app.use(async (req, res, next) => {
     try {
       req.user = await loadUserFromSession(req);
       next();
     } catch (e) {
-      // В случае проблем с БД — не падаем белым экраном.
+      // Р’ СЃР»СѓС‡Р°Рµ РїСЂРѕР±Р»РµРј СЃ Р‘Р” вЂ” РЅРµ РїР°РґР°РµРј Р±РµР»С‹Рј СЌРєСЂР°РЅРѕРј.
       console.error("Auth middleware error:", e);
       next();
     }
@@ -221,7 +353,7 @@ async function main() {
       const email = parsed.kind === "email" ? parsed.value : null;
       const phone = parsed.kind === "phone" ? parsed.value : null;
 
-      // Уникальность.
+      // РЈРЅРёРєР°Р»СЊРЅРѕСЃС‚СЊ.
       if (email) {
         const existing = await db.get("SELECT id FROM users WHERE email = ?", [email]);
         if (existing) return jsonError(res, 409, "EMAIL_TAKEN");
@@ -234,14 +366,14 @@ async function main() {
       const newId = await getNextUserId();
 
       await db.run(
-        "INSERT INTO users (id, email, phone, password_hash, name, role, bio, rating, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [newId, email, phone, passwordHash, name, role, "", 0, now],
+        "INSERT INTO users (id, email, phone, password_hash, name, username, role, bio, rating, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [newId, email, phone, passwordHash, name, null, role, "", 0, now],
       );
 
       await createSession(res, newId, true);
 
       const user = await db.get(
-        "SELECT id, email, phone, name, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, created_at AS createdAt FROM users WHERE id = ?",
+        "SELECT id, email, phone, name, username, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, created_at AS createdAt FROM users WHERE id = ?",
         [newId],
       );
       const stats = await getUserStats(newId);
@@ -265,8 +397,8 @@ async function main() {
 
       const user = await db.get(
         parsed.kind === "email"
-          ? "SELECT id, email, phone, name, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, password_hash AS passwordHash, created_at AS createdAt FROM users WHERE email = ?"
-          : "SELECT id, email, phone, name, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, password_hash AS passwordHash, created_at AS createdAt FROM users WHERE phone = ?",
+          ? "SELECT id, email, phone, name, username, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, password_hash AS passwordHash, created_at AS createdAt FROM users WHERE email = ?"
+          : "SELECT id, email, phone, name, username, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, password_hash AS passwordHash, created_at AS createdAt FROM users WHERE phone = ?",
         [parsed.value],
       );
 
@@ -306,12 +438,20 @@ async function main() {
     const name = String(req.body?.name || "").trim();
     const role = String(req.body?.role || "").trim();
     const bio = String(req.body?.bio || "").trim();
+    const normalizedUsername = normalizeUsername(req.body?.username);
 
     if (!name) return jsonError(res, 400, "NAME_REQUIRED");
+    if (normalizedUsername.error) return jsonError(res, 400, normalizedUsername.error);
 
-    await db.run("UPDATE users SET name = ?, role = ?, bio = ? WHERE id = ?", [name, role, bio, req.user.id]);
+    const username = normalizedUsername.value;
+    if (username) {
+      const existing = await db.get("SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND id != ?", [username, req.user.id]);
+      if (existing) return jsonError(res, 409, "USERNAME_TAKEN");
+    }
+
+    await db.run("UPDATE users SET name = ?, username = ?, role = ?, bio = ? WHERE id = ?", [name, username, role, bio, req.user.id]);
     req.user = await db.get(
-      "SELECT id, email, phone, name, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, created_at AS createdAt FROM users WHERE id = ?",
+      "SELECT id, email, phone, name, username, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, created_at AS createdAt FROM users WHERE id = ?",
       [req.user.id],
     );
     const stats = await getUserStats(req.user.id);
@@ -325,7 +465,7 @@ async function main() {
 
     await db.run("UPDATE users SET avatar_data = ? WHERE id = ?", [next, req.user.id]);
     req.user = await db.get(
-      "SELECT id, email, phone, name, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, created_at AS createdAt FROM users WHERE id = ?",
+      "SELECT id, email, phone, name, username, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, created_at AS createdAt FROM users WHERE id = ?",
       [req.user.id],
     );
     const stats = await getUserStats(req.user.id);
@@ -339,14 +479,14 @@ async function main() {
 
     await db.run("UPDATE users SET cover_data = ? WHERE id = ?", [next, req.user.id]);
     req.user = await db.get(
-      "SELECT id, email, phone, name, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, created_at AS createdAt FROM users WHERE id = ?",
+      "SELECT id, email, phone, name, username, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, created_at AS createdAt FROM users WHERE id = ?",
       [req.user.id],
     );
     const stats = await getUserStats(req.user.id);
     res.json({ ok: true, user: req.user, stats });
   });
 
-  // --- API: USERS (публичные профили) ---
+  // --- API: USERS (РїСѓР±Р»РёС‡РЅС‹Рµ РїСЂРѕС„РёР»Рё) ---
   app.get("/api/users/suggested", async (req, res) => {
     const limit = Math.max(1, Math.min(10, Number(req.query?.limit || 3)));
     const meId = req.user?.id || null;
@@ -356,6 +496,7 @@ async function main() {
       SELECT
         u.id,
         u.name,
+        u.username,
         u.role,
         u.rating,
         u.created_at AS createdAt,
@@ -366,7 +507,7 @@ async function main() {
         AND u.name IS NOT NULL
         AND LENGTH(TRIM(u.name)) > 0
         AND u.name NOT LIKE '%?%'
-        AND u.name NOT LIKE '%�%'
+        AND u.name NOT LIKE '%пїЅ%'
       ORDER BY u.created_at DESC
       LIMIT ?
       `,
@@ -380,7 +521,7 @@ async function main() {
     const q = String(req.query?.q || "").trim();
     if (!q) return res.json({ ok: true, items: [] });
 
-    // Безопасно: отдаём только публичные поля (без email/phone).
+    // Р‘РµР·РѕРїР°СЃРЅРѕ: РѕС‚РґР°С‘Рј С‚РѕР»СЊРєРѕ РїСѓР±Р»РёС‡РЅС‹Рµ РїРѕР»СЏ (Р±РµР· email/phone).
     const meId = req.user.id;
     const raw = q.slice(0, 60);
     const like1 = `%${raw}%`;
@@ -394,31 +535,32 @@ async function main() {
 
     const rows = await db.all(
       `
-      SELECT id, name, role, rating, created_at AS createdAt
+      SELECT id, name, username, role, rating, created_at AS createdAt
       FROM users
       WHERE
         id != ?
         AND name IS NOT NULL
         AND LENGTH(TRIM(name)) > 0
         AND name NOT LIKE '%?%'
-        AND name NOT LIKE '%�%'
+        AND name NOT LIKE '%пїЅ%'
         AND (
           name LIKE ? OR name LIKE ? OR name LIKE ? OR name LIKE ?
+          OR username LIKE ? OR username LIKE ? OR username LIKE ? OR username LIKE ?
           OR role LIKE ? OR role LIKE ? OR role LIKE ? OR role LIKE ?
         )
       ORDER BY created_at DESC
       LIMIT 10
       `,
-      [meId, like1, like2, like3, like4, like1, like2, like3, like4],
+      [meId, like1, like2, like3, like4, like1, like2, like3, like4, like1, like2, like3, like4],
     );
 
     res.json({ ok: true, items: rows });
   });
 
-  // --- API: PUBLIC STATS (для главной, без авторизации) ---
+  // --- API: PUBLIC STATS (РґР»СЏ РіР»Р°РІРЅРѕР№, Р±РµР· Р°РІС‚РѕСЂРёР·Р°С†РёРё) ---
   app.get("/api/public/stats", async (req, res) => {
     const users = await db.get(
-      "SELECT COUNT(*) AS c FROM users WHERE name IS NOT NULL AND LENGTH(TRIM(name)) > 0 AND name NOT LIKE '%?%' AND name NOT LIKE '%�%'",
+      "SELECT COUNT(*) AS c FROM users WHERE name IS NOT NULL AND LENGTH(TRIM(name)) > 0 AND name NOT LIKE '%?%' AND name NOT LIKE '%пїЅ%'",
     );
     const comments = await db.get("SELECT COUNT(*) AS c FROM comments");
 
@@ -434,7 +576,7 @@ async function main() {
     });
   });
 
-  // --- API: BADGES (циферки для шапки) ---
+  // --- API: BADGES (С†РёС„РµСЂРєРё РґР»СЏ С€Р°РїРєРё) ---
   app.get("/api/badges", requireAuth, async (req, res) => {
     const messagesUnread = await getUnreadMessageCount(req.user.id);
     const notificationsUnread = await getUnreadNotificationCount(req.user.id);
@@ -482,7 +624,7 @@ async function main() {
     if (!Number.isFinite(id)) return jsonError(res, 400, "BAD_USER_ID");
 
     const user = await db.get(
-      "SELECT id, name, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, created_at AS createdAt FROM users WHERE id = ?",
+      "SELECT id, name, username, role, bio, rating, avatar_data AS avatarData, cover_data AS coverData, created_at AS createdAt FROM users WHERE id = ?",
       [id],
     );
     if (!user) return jsonError(res, 404, "NOT_FOUND");
@@ -539,8 +681,11 @@ async function main() {
       `
       SELECT
         s.id,
+        s.user_id AS postUserId,
         s.body,
         s.image_data AS imageData,
+        s.poll_type AS pollType,
+        s.poll_correct_option_id AS pollCorrectOptionId,
         s.created_at AS createdAt,
         u.id AS authorId,
         u.name AS authorName,
@@ -560,12 +705,13 @@ async function main() {
       [meId, meId, id],
     );
 
-    res.json({ ok: true, items: rows });
+    const items = await enrichPostsWithPoll(rows, meId);
+    res.json({ ok: true, items });
   });
 
   // --- API: PROJECTS ---
   app.get("/api/projects", async (req, res) => {
-    // Лента доступна всем, но с авторизацией показываем likedByMe.
+    // Р›РµРЅС‚Р° РґРѕСЃС‚СѓРїРЅР° РІСЃРµРј, РЅРѕ СЃ Р°РІС‚РѕСЂРёР·Р°С†РёРµР№ РїРѕРєР°Р·С‹РІР°РµРј likedByMe.
     const meId = req.user?.id ?? null;
     const category = normalizeProjectCategory(req.query?.category);
 
@@ -743,15 +889,14 @@ async function main() {
     const project = await db.get("SELECT id, user_id AS userId FROM projects WHERE id = ?", [id]);
     if (!project) return jsonError(res, 404, "NOT_FOUND");
 
-    await db.run("INSERT INTO comments (project_id, user_id, body, created_at) VALUES (?, ?, ?, ?)", [
+    const commentId = allocateRowId();
+    await db.run("INSERT INTO comments (id, project_id, user_id, body, created_at) VALUES (?, ?, ?, ?, ?)", [
+      commentId,
       id,
       req.user.id,
       body,
       Date.now(),
     ]);
-
-    const inserted = await db.get("SELECT last_insert_rowid() AS id");
-    const commentId = Number(inserted?.id || 0);
     if (Number(project.userId) !== req.user.id) {
       await db.run(
         "INSERT INTO notifications (user_id, type, actor_id, project_id, comment_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -762,7 +907,7 @@ async function main() {
     res.json({ ok: true });
   });
 
-  // --- API: POSTS (текст + картинка) ---
+  // --- API: POSTS (С‚РµРєСЃС‚ + РєР°СЂС‚РёРЅРєР°) ---
   app.get("/api/posts", async (req, res) => {
     const meId = req.user?.id ?? null;
     const limit = Math.max(1, Math.min(100, Number(req.query?.limit || 50)));
@@ -771,8 +916,11 @@ async function main() {
       `
       SELECT
         s.id,
+        s.user_id AS postUserId,
         s.body,
         s.image_data AS imageData,
+        s.poll_type AS pollType,
+        s.poll_correct_option_id AS pollCorrectOptionId,
         s.created_at AS createdAt,
         u.id AS authorId,
         u.name AS authorName,
@@ -791,7 +939,8 @@ async function main() {
       [meId, meId, limit],
     );
 
-    res.json({ ok: true, items: rows });
+    const items = await enrichPostsWithPoll(rows, meId);
+    res.json({ ok: true, items });
   });
 
   app.get("/api/my/posts", requireAuth, async (req, res) => {
@@ -799,8 +948,11 @@ async function main() {
       `
       SELECT
         s.id,
+        s.user_id AS postUserId,
         s.body,
         s.image_data AS imageData,
+        s.poll_type AS pollType,
+        s.poll_correct_option_id AS pollCorrectOptionId,
         s.created_at AS createdAt,
         (SELECT COUNT(*) FROM post_likes l WHERE l.post_id = s.id) AS likesCount,
         (SELECT COUNT(*) FROM post_comments c WHERE c.post_id = s.id) AS commentsCount,
@@ -815,7 +967,8 @@ async function main() {
       `,
       [req.user.id, req.user.id, req.user.id],
     );
-    res.json({ ok: true, items: rows });
+    const items = await enrichPostsWithPoll(rows, req.user.id);
+    res.json({ ok: true, items });
   });
 
   app.get("/api/my/likes", requireAuth, async (req, res) => {
@@ -927,33 +1080,74 @@ async function main() {
     const body = String(req.body?.body || "").trim();
     const imageData = req.body?.imageData == null ? null : String(req.body.imageData || "").trim();
 
-    if (!body && !imageData) return jsonError(res, 400, "BODY_OR_IMAGE_REQUIRED");
+    const normalizedPoll = normalizePollInput(req.body?.poll);
+    if (normalizedPoll.error) return jsonError(res, 400, normalizedPoll.error);
+    const poll = normalizedPoll.poll;
+
+    if (!body && !imageData && !poll) return jsonError(res, 400, "BODY_IMAGE_OR_POLL_REQUIRED");
+    if (poll && !body) return jsonError(res, 400, "POLL_QUESTION_REQUIRED");
     if (body.length > 4000) return jsonError(res, 400, "BODY_TOO_LONG");
 
     let storedImage = null;
     if (imageData) {
-      // Храним картинку прямо в SQLite (data URL) — для MVP. Ограничиваем размер.
       if (!/^data:image\/(png|jpe?g|webp);base64,/i.test(imageData)) return jsonError(res, 400, "BAD_IMAGE");
       if (imageData.length > 1_700_000) return jsonError(res, 400, "IMAGE_TOO_LARGE");
       storedImage = imageData;
     }
 
     const now = Date.now();
-    await db.run("INSERT INTO posts (user_id, body, image_data, created_at) VALUES (?, ?, ?, ?)", [
-      req.user.id,
-      body,
-      storedImage,
-      now,
-    ]);
+    const postId = allocateRowId();
+    try {
+      await db.run(
+        "INSERT INTO posts (id, user_id, body, image_data, poll_type, poll_correct_option_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [postId, req.user.id, body, storedImage, poll ? poll.type : null, null, now],
+      );
 
-    res.json({ ok: true });
+      if (poll) {
+        const optionIds = [];
+        for (let i = 0; i < poll.options.length; i += 1) {
+          const optionId = allocateRowId();
+          await db.run("INSERT INTO poll_options (id, post_id, label, position, created_at) VALUES (?, ?, ?, ?, ?)", [
+            optionId,
+            postId,
+            poll.options[i],
+            i,
+            now,
+          ]);
+          optionIds.push(optionId);
+        }
+
+        if (optionIds.length < 2) {
+          await db.run("DELETE FROM posts WHERE id = ?", [postId]);
+          return jsonError(res, 400, "BAD_POLL_OPTIONS");
+        }
+
+        if (poll.type === "quiz") {
+          const correctOptionId = optionIds[poll.correctOptionIndex] || null;
+          if (!correctOptionId) {
+            await db.run("DELETE FROM posts WHERE id = ?", [postId]);
+            return jsonError(res, 400, "BAD_POLL_QUIZ_ANSWER");
+          }
+          await db.run("UPDATE posts SET poll_correct_option_id = ? WHERE id = ?", [correctOptionId, postId]);
+        }
+      }
+    } catch (err) {
+      try {
+        await db.run("DELETE FROM posts WHERE id = ?", [postId]);
+      } catch {
+        // ignore cleanup errors
+      }
+      throw err;
+    }
+
+    res.json({ ok: true, postId });
   });
 
   app.put("/api/posts/:id", requireAuth, async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return jsonError(res, 400, "BAD_POST_ID");
 
-    const existing = await db.get("SELECT id, user_id AS userId, image_data AS imageData FROM posts WHERE id = ?", [id]);
+    const existing = await db.get("SELECT id, user_id AS userId, image_data AS imageData, poll_type AS pollType FROM posts WHERE id = ?", [id]);
     if (!existing) return jsonError(res, 404, "NOT_FOUND");
     if (Number(existing.userId) !== req.user.id) return jsonError(res, 403, "FORBIDDEN");
 
@@ -973,8 +1167,8 @@ async function main() {
       }
     }
 
-    // Нельзя сохранить полностью пустой пост (без текста и без картинки).
-    if (!body && !nextImage) return jsonError(res, 400, "BODY_OR_IMAGE_REQUIRED");
+    // РќРµР»СЊР·СЏ СЃРѕС…СЂР°РЅРёС‚СЊ РїРѕР»РЅРѕСЃС‚СЊСЋ РїСѓСЃС‚РѕР№ РїРѕСЃС‚ (Р±РµР· С‚РµРєСЃС‚Р° Рё Р±РµР· РєР°СЂС‚РёРЅРєРё).
+    if (!body && !nextImage && !existing.pollType) return jsonError(res, 400, "BODY_OR_IMAGE_REQUIRED");
 
     await db.run("UPDATE posts SET body = ?, image_data = ? WHERE id = ?", [body, nextImage, id]);
     res.json({ ok: true });
@@ -1015,6 +1209,44 @@ async function main() {
     }
     const count = await db.get("SELECT COUNT(*) AS c FROM post_likes WHERE post_id = ?", [postId]);
     res.json({ ok: true, liked: true, likesCount: Number(count?.c || 0) });
+  });
+
+  app.post("/api/posts/:id/poll-vote", requireAuth, async (req, res) => {
+    const postId = Number(req.params.id);
+    if (!Number.isFinite(postId)) return jsonError(res, 400, "BAD_POST_ID");
+
+    const optionId = Number(req.body?.optionId);
+    if (!Number.isFinite(optionId)) return jsonError(res, 400, "BAD_OPTION_ID");
+
+    const post = await db.get(
+      "SELECT id, user_id AS postUserId, poll_type AS pollType, poll_correct_option_id AS pollCorrectOptionId FROM posts WHERE id = ?",
+      [postId],
+    );
+    if (!post) return jsonError(res, 404, "NOT_FOUND");
+    if (!post.pollType) return jsonError(res, 400, "NO_POLL");
+
+    const opt = await db.get("SELECT id FROM poll_options WHERE id = ? AND post_id = ?", [optionId, postId]);
+    if (!opt) return jsonError(res, 400, "BAD_OPTION_ID");
+
+    await db.run("INSERT OR REPLACE INTO poll_votes (post_id, option_id, user_id, created_at) VALUES (?, ?, ?, ?)", [
+      postId,
+      optionId,
+      req.user.id,
+      Date.now(),
+    ]);
+
+    const poll = await fetchPollForPost(
+      {
+        id: postId,
+        pollType: post.pollType,
+        pollCorrectOptionId: post.pollCorrectOptionId,
+        postUserId: post.postUserId,
+      },
+      req.user.id,
+      true,
+    );
+
+    res.json({ ok: true, poll });
   });
 
   app.get("/api/posts/:id/comments", async (req, res) => {
@@ -1068,7 +1300,7 @@ async function main() {
     res.json({ ok: true });
   });
 
-  // --- API: REPOST (проекты/посты) ---
+  // --- API: REPOST (РїСЂРѕРµРєС‚С‹/РїРѕСЃС‚С‹) ---
   app.post("/api/repost", requireAuth, async (req, res) => {
     const type = String(req.body?.type || "").trim().toLowerCase();
     const id = Number(req.body?.id);
@@ -1179,7 +1411,7 @@ async function main() {
     res.json({ ok: true, items });
   });
 
-  // --- API: MESSENGER (1-на-1) ---
+  // --- API: MESSENGER (1-РЅР°-1) ---
   app.get("/api/conversations", requireAuth, async (req, res) => {
     const meId = req.user.id;
     const rows = await db.all(
@@ -1282,15 +1514,14 @@ async function main() {
     if (body.length > 2000) return jsonError(res, 400, "BODY_TOO_LONG");
 
     const now = Date.now();
-    await db.run("INSERT INTO messages (conversation_id, sender_id, body, created_at) VALUES (?, ?, ?, ?)", [
+    const messageId = allocateRowId();
+    await db.run("INSERT INTO messages (id, conversation_id, sender_id, body, created_at) VALUES (?, ?, ?, ?, ?)", [
+      messageId,
       id,
       req.user.id,
       body,
       now,
     ]);
-
-    const inserted = await db.get("SELECT last_insert_rowid() AS id");
-    const messageId = Number(inserted?.id || 0);
     await upsertConversationRead(req.user.id, id, messageId);
     res.json({ ok: true, id: messageId, createdAt: now });
   });
